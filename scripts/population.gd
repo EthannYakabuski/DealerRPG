@@ -4,12 +4,19 @@ extends Node3D
 const PERSON_LAYER: int = 4
 const VEHICLE_LAYER: int = 8
 const NAV_CELL: float = 2.0
+const GROUP_SPACING: float = 1.75
+const PEDESTRIAN_CLEARANCE: float = 1.5
 var world: Node3D
 var player: StudentPlayer
 var citizens: Array[Dictionary] = []
 var vehicles: Array[Dictionary] = []
 var police: Array[Dictionary] = []
 var meeting_actors: Dictionary = {}
+var meeting_walks: Dictionary = {}
+var _pedestrian_neighbors: Array[Dictionary] = []
+var _neighbor_refresh := 0.0
+var _animation_lod_timer := 0.0
+var _grounding_cache: Dictionary = {}
 var rng := RandomNumberGenerator.new()
 var pursuit := false
 var escape_seconds := 0.0
@@ -25,6 +32,7 @@ var _last_schedule_hour := -1
 func setup(city: Node3D, student: StudentPlayer) -> void:
 	world = city
 	player = student
+	player.city_world = world
 	rng.seed = 87261
 	_build_navigation()
 	var routes: Array = world.pedestrian_routes
@@ -36,8 +44,8 @@ func setup(city: Node3D, student: StudentPlayer) -> void:
 		var names := ["character-female-a","character-male-d","character-female-e","character-male-b","character-female-f","character-male-e"]
 		var actor := _person(names[index % names.size()],1.7+rng.randf_range(-0.08,0.14))
 		var spawn: Dictionary = _sample_route(route,0.12+float(group_id / routes.size())/3.0)
-		var offset := Vector3(float(index%3-1)*0.7,0,float(index%2)*0.65)
-		actor.position = spawn.position + offset
+		var offset := Vector3(float(index%3-1)*GROUP_SPACING,0,float(index%2)*1.1)
+		actor.position = _safe_pedestrian_target(spawn.position + offset)
 		citizens.append({"node":actor,"route":route,"index":spawn.index,"speed":1.2+float(group_id%3)*0.12,"hp":100.0,"panic":0.0,"stun":0.0,"wait":float(group_id%3),"goal":"Heading to class","group":group_id,"offset":offset,"nav_path":PackedVector3Array(),"nav_index":0,"nav_target":Vector3.INF,"nav_timer":0.0,"dead_seconds":0.0})
 	for index in range(7):
 		var campus := index < 4
@@ -59,11 +67,12 @@ func setup(city: Node3D, student: StudentPlayer) -> void:
 		var route: PackedVector3Array = traffic[index % traffic.size()]
 		if route.size() < 2: continue
 		var models := ["sedan","hatchback-sports","suv","taxi","van","sedan-sports"]
-		var body := _vehicle(models[index%models.size()])
+		var cruiser := index == 4
+		var body := _vehicle("police" if cruiser else models[index%models.size()])
 		var spawn: Dictionary = _sample_route(route,float(index / traffic.size())/4.0)
 		body.position = spawn.position
 		body.rotation.y = _heading(route[int(spawn.index)]-body.position)
-		vehicles.append({"node":body,"route":route,"index":spawn.index,"speed":rng.randf_range(6.0,9.0),"parked":false,"stolen":false,"occupied":false,"wait":0.0,"stuck":0.0})
+		vehicles.append({"node":body,"route":route,"index":spawn.index,"speed":rng.randf_range(6.0,9.0),"parked":false,"stolen":false,"occupied":false,"wait":0.0,"stuck":0.0,"police":cruiser,"distance_travelled":0.0})
 	for spawn: Dictionary in world.parked_car_spawns:
 		var body := _vehicle(str(spawn.get("model","sedan")))
 		body.position = spawn.position
@@ -79,6 +88,10 @@ func setup(city: Node3D, student: StudentPlayer) -> void:
 	if not Game.changed.is_connected(_sync_meetings): Game.changed.connect(_sync_meetings)
 	_update_citizen_schedule()
 	_sync_meetings()
+	for record: Dictionary in citizens+police: _ground_person(record.node)
+	_ground_person(friend)
+	_refresh_neighbor_lists()
+	_update_animation_lod()
 
 func reset_population() -> void:
 	for child: Node in get_children():
@@ -88,6 +101,10 @@ func reset_population() -> void:
 	vehicles.clear()
 	police.clear()
 	meeting_actors.clear()
+	meeting_walks.clear()
+	_grounding_cache.clear()
+	_neighbor_refresh = 0.0
+	_animation_lod_timer = 0.0
 	pursuit = false
 	escape_seconds = 0.0
 	arrest_seconds = 0.0
@@ -115,6 +132,47 @@ func _person(asset: String, height: float) -> CharacterBody3D:
 	ActorVisuals.play(person,"idle")
 	return person
 
+func _ground_person(actor: Node3D) -> void:
+	var id := actor.get_instance_id()
+	var at := actor.global_position
+	var cached: Dictionary = _grounding_cache.get(id,{})
+	if not cached.is_empty():
+		var previous: Vector3 = cached.position
+		if absf(previous.y-at.y)<0.002 and Vector2(previous.x,previous.z).distance_squared_to(Vector2(at.x,at.z))<0.0081: return
+	else:
+		var parts: Array[Dictionary] = []
+		for child: Node in actor.get_children():
+			if child is Node3D and not child is CollisionShape3D:
+				parts.append({"node":child,"base_y":child.position.y})
+		cached = {"parts":parts}
+		_grounding_cache[id] = cached
+	var support: float = world.walkable_support_height(at,0.24)
+	var lift := support-at.y
+	for part: Dictionary in cached.parts: part.node.position.y = float(part.base_y)+lift
+	cached.position = at
+
+func _refresh_neighbor_lists() -> void:
+	# Ten-Hz broadphase keeps separation local instead of scanning the whole city
+	# for every pedestrian on every physics tick. Three-metre cells cover movement
+	# between refreshes as well as the full personal-space radius.
+	_pedestrian_neighbors = citizens + police
+	for record: Dictionary in meeting_walks.values(): _pedestrian_neighbors.append(record)
+	var buckets: Dictionary = {}
+	for record: Dictionary in _pedestrian_neighbors:
+		var at: Vector3 = record.node.position
+		var cell := Vector2i(floori(at.x/3.0),floori(at.z/3.0))
+		if not buckets.has(cell): buckets[cell] = []
+		buckets[cell].append(record)
+	for record: Dictionary in _pedestrian_neighbors:
+		var at: Vector3 = record.node.position
+		var cell := Vector2i(floori(at.x/3.0),floori(at.z/3.0))
+		var neighbors: Array[CharacterBody3D] = []
+		for x in range(-1,2):
+			for z in range(-1,2):
+				for neighbor: Dictionary in buckets.get(cell+Vector2i(x,z),[]):
+					if neighbor.node!=record.node: neighbors.append(neighbor.node)
+		record.neighbors = neighbors
+
 func _vehicle(asset: String) -> AnimatableBody3D:
 	var body := AnimatableBody3D.new()
 	body.sync_to_physics = false
@@ -135,6 +193,10 @@ func _physics_process(delta: float) -> void:
 	crime_age += delta
 	lod_tick += delta
 	var indoor: bool = player.position.x > 400.0
+	_neighbor_refresh -= delta
+	if _neighbor_refresh<=0.0:
+		_refresh_neighbor_lists()
+		_neighbor_refresh = 0.1
 	for citizen: Dictionary in citizens:
 		_update_citizen(citizen,delta,indoor)
 	_update_traffic(delta,indoor)
@@ -142,10 +204,12 @@ func _physics_process(delta: float) -> void:
 	if friend:
 		friend.visible = Game.tutorial_step < 3 and not indoor
 		friend.collision_layer = PERSON_LAYER if friend.visible else 0
-	for id: String in meeting_actors:
-		var actor: CharacterBody3D = meeting_actors[id]
-		actor.visible = not indoor and not bool(actor.get_meta("defeated",false))
-		actor.collision_layer = PERSON_LAYER if actor.visible else 0
+		_ground_person(friend)
+	_update_meeting_walks(delta,indoor)
+	_animation_lod_timer -= delta
+	if _animation_lod_timer<=0.0:
+		_update_animation_lod()
+		_animation_lod_timer = 0.2
 	if lod_tick > 1.0:
 		lod_tick = 0.0
 		_sync_meetings()
@@ -153,6 +217,7 @@ func _physics_process(delta: float) -> void:
 
 func _update_citizen(citizen: Dictionary, delta: float, indoor: bool) -> void:
 	var actor: CharacterBody3D = citizen.node
+	_ground_person(actor)
 	if float(citizen.hp) <= 0.0:
 		citizen.dead_seconds += delta
 		actor.visible = not indoor and float(citizen.dead_seconds) < 25.0
@@ -176,16 +241,54 @@ func _update_citizen(citizen: Dictionary, delta: float, indoor: bool) -> void:
 		return
 	if float(citizen.wait) > 0.0:
 		citizen.wait = maxf(0.0,float(citizen.wait)-delta)
+		_settle_idle_spacing(citizen,delta)
 		ActorVisuals.play(actor,"idle")
 		return
 	var route: PackedVector3Array = citizen.route
-	var target: Vector3 = route[int(citizen.index)]+Vector3(citizen.offset)
+	if int(citizen.get("target_index",-1))!=int(citizen.index):
+		citizen.walk_target = _safe_pedestrian_target(route[int(citizen.index)]+Vector3(citizen.offset))
+		citizen.target_index = int(citizen.index)
+	var target: Vector3 = citizen.walk_target
 	if _horizontal_distance(actor.position,target) < 1.2:
 		citizen.index = (int(citizen.index)+1)%route.size()
 		citizen.wait = 1.0+float(int(citizen.group)%4)
 		if Game.current_phase() in ["Evening","Dusk","Night"]: citizen.wait = 8.0+float(int(citizen.group)%4)*3.0
 	else:
 		_move_person(citizen,target,float(citizen.speed),delta)
+
+func _safe_pedestrian_target(at: Vector3) -> Vector3:
+	var result := at
+	for obstacle: Rect2 in world.obstacle_rects:
+		var clear := obstacle.grow(0.65)
+		if not clear.has_point(Vector2(result.x,result.z)): continue
+		var options: Array[Vector3] = [Vector3(clear.position.x-0.1,result.y,result.z),Vector3(clear.end.x+0.1,result.y,result.z),Vector3(result.x,result.y,clear.position.y-0.1),Vector3(result.x,result.y,clear.end.y+0.1)]
+		var nearest := INF
+		for option: Vector3 in options:
+			var distance := result.distance_squared_to(option)
+			if distance<nearest:
+				nearest = distance
+				at = option
+		result = at
+	return result
+
+func _settle_idle_spacing(record: Dictionary, delta: float) -> void:
+	var actor: CharacterBody3D = record.node
+	var away := Vector3.ZERO
+	for other: CharacterBody3D in record.get("neighbors",[]):
+		if not is_instance_valid(other) or not other.visible or other.collision_layer==0: continue
+		var separation: Vector3 = actor.position-other.position
+		separation.y = 0.0
+		var squared := separation.length_squared()
+		if squared>=PEDESTRIAN_CLEARANCE*PEDESTRIAN_CLEARANCE: continue
+		var distance := sqrt(squared)
+		if distance>0.05:
+			away += separation/distance*(PEDESTRIAN_CLEARANCE-distance)
+	if away.length_squared()<0.001: return
+	var target := actor.position+away.normalized()*minf(away.length(),delta*0.9)
+	if _safe_pedestrian_target(target).distance_squared_to(target)>0.01: return
+	actor.velocity = (target-actor.position)/maxf(delta,0.001)
+	actor.velocity.y = -0.5
+	actor.move_and_slide()
 
 func _update_citizen_schedule() -> void:
 	var hour := int(Game.minute/60.0)
@@ -200,6 +303,8 @@ func _update_citizen_schedule() -> void:
 		citizen.goal = (night_goals if hour_of_day >= 18 or hour_of_day < 7 else day_goals)[route_index%5]
 
 func _update_traffic(delta: float, indoor: bool) -> void:
+	# Only vehicles whose actual lane corridor intersects ours cause a queue.
+	# The previous broad cone also stopped for oncoming and parked cars beside roads.
 	for car: Dictionary in vehicles:
 		var actor: AnimatableBody3D = car.node
 		actor.visible = not indoor
@@ -208,28 +313,68 @@ func _update_traffic(delta: float, indoor: bool) -> void:
 		if route.size() < 2: continue
 		var target: Vector3 = route[int(car.index)]
 		var distance := _horizontal_distance(actor.position,target)
-		if distance < 0.65:
+		if distance < 0.35:
 			car.index = (int(car.index)+1)%route.size()
-			continue
+			target = route[int(car.index)]
+			distance = _horizontal_distance(actor.position,target)
 		var direction: Vector3 = (target-actor.position).normalized()
 		var speed: float = car.speed
-		if not player.vehicle and actor.position.distance_to(player.position) < 5.0: speed = 0.0
+		var front: Vector3 = player.position-actor.position
+		if not player.vehicle and absf(front.y)<2.0 and front.dot(direction)>-1.0 and front.dot(direction)<5.2 and absf(front.cross(direction).y)<1.6: speed = 0.0
 		for other: Dictionary in vehicles:
 			if other.node == actor: continue
 			var relative: Vector3 = other.node.position-actor.position
-			if relative.length_squared() < 28.0 and relative.normalized().dot(direction) > 0.68:
-				# Deterministic priority lets crossing routes take turns.
-				if bool(other.parked) or actor.get_instance_id() > other.node.get_instance_id() or relative.normalized().dot(other.node.basis.z)>0.65: speed = 0.0
-		car.stuck = float(car.stuck)+delta if speed == 0.0 else 0.0
-		actor.position += direction*minf(speed*delta,distance)
-		actor.rotation.y = lerp_angle(actor.rotation.y,_heading(direction),minf(1.0,delta*4.0))
+			relative.y = 0.0
+			if relative.length_squared()>360.0: continue
+			var other_direction: Vector3 = other.node.basis.z
+			if not other.parked and not other.occupied and other.route.size()>1:
+				other_direction = (other.route[int(other.index)]-other.node.position).normalized()
+			var ahead := relative.dot(direction)
+			var lateral := absf(relative.cross(direction).y)
+			var alignment := direction.dot(other_direction)
+			if bool(other.parked) or bool(other.occupied):
+				# Project both actual car bodies onto our lane instead of treating a stall as a five-metre circle.
+				var half_width := absf(alignment)*0.95+absf(direction.cross(other_direction).y)*2.0
+				var half_length := absf(alignment)*2.0+absf(direction.cross(other_direction).y)*0.95
+				if ahead>0.0 and ahead<2.1+half_length+0.5 and lateral<1.0+half_width: speed = 0.0
+				continue
+			if alignment>0.6 and ahead>0.0 and ahead<5.8 and lateral<2.05:
+				# Following cars always yield to the car ahead, regardless of creation order.
+				speed = minf(speed,maxf(0.0,(ahead-4.9)*3.0))
+				continue
+			if alignment>0.6 or (alignment < -0.6 and lateral>2.2): continue
+			var crossing := _traffic_crossing(actor.position,direction,other.node.position,other_direction)
+			if not crossing.is_finite(): continue
+			var ours: float = crossing.x
+			var theirs: float = crossing.y
+			if ours < -2.5 or theirs < -2.5 or ours > minf(distance+2.0,14.0) or theirs > 14.0: continue
+			# A car already entering the junction clears it; ties have one stable winner.
+			var their_priority: bool = theirs < 2.4 or (ours>=2.4 and other.node.get_instance_id()<actor.get_instance_id())
+			if their_priority and ours>2.4: speed = minf(speed,maxf(0.0,(ours-4.5)*3.0))
+		car.stuck = float(car.stuck)+delta if speed<0.1 else 0.0
+		var advance := minf(speed*delta,distance)
+		car.distance_travelled = float(car.get("distance_travelled",0.0))+advance
+		actor.position += direction*advance
+		actor.rotation.y = lerp_angle(actor.rotation.y,_heading(direction),minf(1.0,delta*6.0))
+
+func _traffic_crossing(a: Vector3, direction: Vector3, b: Vector3, other_direction: Vector3) -> Vector2:
+	var divisor := direction.x*other_direction.z-direction.z*other_direction.x
+	if absf(divisor)<0.06: return Vector2.INF
+	var between := b-a
+	return Vector2((between.x*other_direction.z-between.z*other_direction.x)/divisor,(between.x*direction.z-between.z*direction.x)/divisor)
 
 func _update_police(delta: float, indoor: bool) -> void:
 	var seen := false
 	var closest := INF
 	var player_on_campus := _is_campus(player.position)
+	if not indoor and not player_on_campus and _cruiser_sees_player():
+		if stolen_vehicle and player.vehicle and not pursuit:
+			_begin_pursuit("STOLEN VEHICLE IDENTIFIED — a road patrol called it in.")
+			_alert_city_officers()
+		if pursuit: seen = true
 	for officer: Dictionary in police:
 		var actor: CharacterBody3D = officer.node
+		_ground_person(actor)
 		actor.visible = not indoor
 		actor.collision_layer = PERSON_LAYER if actor.visible and float(officer.hp)>0.0 else 0
 		if float(officer.hp) <= 0.0: continue
@@ -274,8 +419,20 @@ func _update_police(delta: float, indoor: bool) -> void:
 		Game.set_heat(maxf(0.0,Game.heat-30.0))
 		Game.notification.emit("You lost the patrol. Keep a low profile.")
 
+func _cruiser_sees_player() -> bool:
+	for car: Dictionary in vehicles:
+		if not bool(car.get("police",false)) or car.occupied or car.stolen: continue
+		if _horizontal_distance(car.node.position,player.position)<22.0 and _line_of_sight(car.node.position,player.position): return true
+	return false
+
+func _alert_city_officers() -> void:
+	for officer: Dictionary in police:
+		if not bool(officer.campus) and float(officer.hp)>0.0: officer.alert = 15.0
+
 func _begin_pursuit(message: String) -> void:
-	if not pursuit: Game.notification.emit(message)
+	if not pursuit:
+		Game.notification.emit(message)
+		if Game.has_signal("feedback_event"): Game.emit_signal("feedback_event","detected",0.0)
 	pursuit = true
 	escape_seconds = 0.0
 	Game.set_heat(maxf(Game.heat,40.0))
@@ -335,6 +492,22 @@ func _move_person(record: Dictionary, target: Vector3, speed: float, delta: floa
 		ActorVisuals.play(actor,"idle")
 		return
 	direction = direction.normalized()
+	if not record.has("campus"):
+		var separation := Vector3.ZERO
+		for other: CharacterBody3D in record.get("neighbors",[]):
+			if not is_instance_valid(other) or not other.visible or other.collision_layer==0: continue
+			var away := actor.position-other.position
+			away.y = 0.0
+			var squared := away.length_squared()
+			if squared>=PEDESTRIAN_CLEARANCE*PEDESTRIAN_CLEARANCE: continue
+			var gap := sqrt(squared)
+			if gap<0.05:
+				away = Vector3.RIGHT if actor.get_instance_id()>other.get_instance_id() else Vector3.LEFT
+				gap = 0.05
+			separation += away/gap*(PEDESTRIAN_CLEARANCE-gap)*2.6
+			if direction.dot(-away/gap)>0.6:
+				separation += Vector3(direction.z,0,-direction.x)*(PEDESTRIAN_CLEARANCE-gap)*0.9
+		direction = (direction+separation).normalized()
 	if record.has("campus") and _is_campus(actor.position+direction*speed*delta) != bool(record.campus):
 		if _is_campus(actor.position) == bool(record.campus): return
 	actor.velocity.x = direction.x*speed
@@ -343,6 +516,7 @@ func _move_person(record: Dictionary, target: Vector3, speed: float, delta: floa
 	actor.move_and_slide()
 	actor.rotation.y = lerp_angle(actor.rotation.y,_heading(direction),minf(1.0,delta*7.0))
 	ActorVisuals.play(actor,"sprint" if speed>2.5 else "walk")
+	_ground_person(actor)
 
 func _line_of_sight(from: Vector3, to: Vector3) -> bool:
 	var query := PhysicsRayQueryParameters3D.create(from+Vector3.UP,to+Vector3.UP,1)
@@ -359,6 +533,9 @@ func on_crime(severity: float) -> void:
 		for citizen: Dictionary in citizens:
 			if citizen.node.position.distance_to(player.position)<16.0 and _line_of_sight(citizen.node.position,player.position): citizen.panic = 6.0
 	var campus := _is_campus(player.position)
+	if not campus and _cruiser_sees_player():
+		_begin_pursuit("SPOTTED — a road patrol called the deal in.")
+		_alert_city_officers()
 	var nearest: Dictionary = {}
 	var best := INF
 	for officer: Dictionary in police:
@@ -449,9 +626,39 @@ func spawn_owned_vehicle() -> void:
 
 func meeting_actor_in_reach(meeting_id: int, radius: float = 4.0) -> bool:
 	var id := str(meeting_id)
-	if not meeting_actors.has(id): return false
+	if not meeting_actors.has(id) or meeting_walks[id].state!="waiting": return false
 	var actor: Node3D = meeting_actors[id]
 	return is_instance_valid(actor) and actor.visible and player.position.distance_to(actor.position)<=radius and _line_of_sight(player.position,actor.position)
+
+func capture_meeting_state() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for id: String in meeting_walks:
+		var record: Dictionary = meeting_walks[id]
+		if record.state=="departing": continue
+		var at: Vector3 = record.node.position
+		var target: Vector3 = record.target
+		result.append({"id":int(id),"position":[at.x,at.y,at.z],"target":[target.x,target.y,target.z],"state":record.state,"start_minute":record.start_minute,"due":record.due})
+	return result
+
+func restore_meeting_state(saved: Array) -> void:
+	_sync_meetings()
+	for entry: Variant in saved:
+		if not entry is Dictionary: continue
+		var id := str(int(entry.get("id",-1)))
+		if not meeting_walks.has(id): continue
+		var position_data: Variant = entry.get("position",[])
+		if not position_data is Array or position_data.size()!=3: continue
+		var at := Vector3(float(position_data[0]),float(position_data[1]),float(position_data[2]))
+		if not at.is_finite() or absf(at.x)>150.0 or absf(at.z)>122.0 or at.y < -0.5 or at.y>2.0: continue
+		var record: Dictionary = meeting_walks[id]
+		record.node.position = at
+		record.nav_path = _walking_path(at,record.target)
+		record.nav_index = 0
+		record.last_minute = Game.minute
+		var start: float = float(entry.get("start_minute",record.start_minute))
+		if is_finite(start): record.start_minute = start
+		if str(entry.get("state",""))=="waiting" and Game.minute>=float(record.due)-Game.MEETING_ARRIVAL_MINUTES and _horizontal_distance(at,record.target)<2.0:
+			record.state = "waiting"
 
 func capture_pursuit_state() -> Dictionary:
 	var officers: Array[Dictionary] = []
@@ -529,23 +736,143 @@ func _sync_meetings() -> void:
 	var live: Array[String] = []
 	for meeting: Dictionary in Game.meetings:
 		if meeting.status!="scheduled": continue
-		if Game.minute<float(meeting.due_minute)-Game.MEETING_WINDOW: continue
-		var id := str(meeting.id)
+		var id := str(int(meeting.id))
 		live.append(id)
-		if meeting_actors.has(id) or not world.landmarks.has(meeting.location_id): continue
+		if meeting_actors.has(id):
+			var existing: Dictionary = meeting_walks[id]
+			if Game.minute-float(existing.last_minute)>6.0:
+				_fast_forward_offscreen(existing,Game.minute-float(existing.last_minute))
+			existing.last_minute = Game.minute
+			continue
+		if Game.minute<float(meeting.due_minute)-90.0 or not world.landmarks.has(meeting.location_id): continue
+		var landmark: Vector3 = world.landmarks[meeting.location_id].position
+		var cell := _nearest_open_cell(landmark+Vector3(2.2,0,1.8))
+		var target := Vector3(cell.x*NAV_CELL,0.2,cell.y*NAV_CELL)
+		var start := _offscreen_walk_point(target)
+		if not start.is_finite(): continue
 		var actor := _person("character-male-e" if meeting.type=="supplier" else "character-female-b",1.8)
-		actor.position = world.landmarks[meeting.location_id].position+Vector3(2.2,0,1.8)
+		actor.position = start
 		var tag := ActorVisuals.label(str(meeting.contact_name).to_upper(),Color("edc37e"),22)
 		tag.position.y = 2.5
 		actor.add_child(tag)
 		actor.add_child(ActorVisuals.ground_ring(Color("edc37e"),0.7))
 		actor.visible = player.position.x<400.0
 		actor.collision_layer = PERSON_LAYER if actor.visible else 0
+		var path := _walking_path(start,target)
+		var distance := _path_distance(start,path,0,target)
 		meeting_actors[id] = actor
-	for id: String in meeting_actors.keys():
-		if not live.has(id):
-			meeting_actors[id].queue_free()
-			meeting_actors.erase(id)
+		meeting_walks[id] = {"node":actor,"hp":100.0,"state":"approaching","target":target,"due":float(meeting.due_minute),"start_minute":float(meeting.due_minute)-Game.MEETING_ARRIVAL_MINUTES-distance/1.9*3.0,"last_minute":Game.minute,"nav_path":path,"nav_index":0,"nav_target":target,"nav_timer":2.0}
+	for id: String in meeting_walks.keys():
+		if live.has(id): continue
+		var record: Dictionary = meeting_walks[id]
+		if record.state=="departing": continue
+		if _point_offscreen(record.node.position):
+			_remove_meeting_actor(id)
+			continue
+		var exit := _offscreen_walk_point(record.node.position)
+		if not exit.is_finite(): continue
+		record.state = "departing"
+		record.target = exit
+		record.nav_path = _walking_path(record.node.position,exit)
+		record.nav_index = 0
+		record.nav_target = exit
+		record.nav_timer = 2.0
+
+func _update_meeting_walks(delta: float, indoor: bool) -> void:
+	for id: String in meeting_walks.keys():
+		var record: Dictionary = meeting_walks[id]
+		var actor: CharacterBody3D = record.node
+		_ground_person(actor)
+		_set_person_visible(actor,not indoor)
+		actor.collision_layer = PERSON_LAYER if actor.visible else 0
+		if record.state=="departing":
+			if _point_offscreen(actor.position):
+				_remove_meeting_actor(id)
+				continue
+			_move_person(record,record.target,2.0,delta)
+			continue
+		if record.state=="waiting":
+			ActorVisuals.play(actor,"idle")
+			continue
+		if Game.minute<float(record.start_minute): continue
+		var remaining := _horizontal_distance(actor.position,record.target) if _line_of_sight(actor.position,record.target) else _path_distance(actor.position,record.nav_path,int(record.nav_index),record.target)
+		var seconds_left := maxf(0.1,(float(record.due)-Game.MEETING_ARRIVAL_MINUTES-Game.minute)/3.0)
+		var speed := clampf(remaining/seconds_left,1.2,5.8)
+		if _horizontal_distance(actor.position,record.target)<0.85:
+			if Game.minute>=float(record.due)-Game.MEETING_ARRIVAL_MINUTES:
+				record.state = "waiting"
+				ActorVisuals.play(actor,"idle")
+			continue
+		_move_person(record,record.target,speed,delta)
+
+func _point_offscreen(at: Vector3) -> bool:
+	if not player.camera or not player.camera.is_inside_tree():
+		return _horizontal_distance(player.position,at)>46.0
+	var camera := player.camera
+	if camera.is_position_behind(at): return true
+	# Margin includes the character and overhead name, so neither can pop into view.
+	var screen := camera.get_viewport().get_visible_rect().grow(70.0)
+	return not screen.has_point(camera.unproject_position(at+Vector3.UP*1.6))
+
+func _offscreen_walk_point(target: Vector3) -> Vector3:
+	var best := Vector3.INF
+	var best_distance := INF
+	for radius: float in [18.0,28.0,40.0,56.0,76.0,100.0]:
+		for index in range(16):
+			var angle := TAU*float(index)/16.0
+			var candidate := target+Vector3(cos(angle),0,sin(angle))*radius
+			if absf(candidate.x)>146.0 or absf(candidate.z)>116.0: continue
+			var cell := _nearest_open_cell(candidate)
+			candidate = Vector3(cell.x*NAV_CELL,0.2,cell.y*NAV_CELL)
+			if not _point_offscreen(candidate): continue
+			var path := _walking_path(candidate,target)
+			if path.is_empty(): continue
+			var distance := _path_distance(candidate,path,0,target)
+			if distance<best_distance:
+				best_distance = distance
+				best = candidate
+		if best.is_finite(): break
+	return best
+
+func _walking_path(start: Vector3, target: Vector3) -> PackedVector3Array:
+	var points := navigation.get_point_path(_nearest_open_cell(start),_nearest_open_cell(target))
+	var result := PackedVector3Array()
+	for point: Vector2 in points: result.append(Vector3(point.x,0.2,point.y))
+	return result
+
+func _path_distance(start: Vector3, path: PackedVector3Array, from_index: int, target: Vector3) -> float:
+	var distance := 0.0
+	var previous := start
+	for index in range(from_index,path.size()):
+		distance += _horizontal_distance(previous,path[index])
+		previous = path[index]
+	return distance+_horizontal_distance(previous,target)
+
+func _fast_forward_offscreen(record: Dictionary, minutes: float) -> void:
+	# Agenda waiting and loading may jump the clock. Advance only through unseen
+	# space, then let the client visibly walk in through the edge of the camera.
+	if record.state!="approaching" or not _point_offscreen(record.node.position): return
+	var allowance := minutes/3.0*2.1
+	var path := _walking_path(record.node.position,record.target)
+	for point: Vector3 in path:
+		if not _point_offscreen(point): break
+		var distance := _horizontal_distance(record.node.position,point)
+		if distance>allowance: break
+		record.node.position = point
+		allowance -= distance
+	record.nav_path = _walking_path(record.node.position,record.target)
+	record.nav_index = 0
+	if _horizontal_distance(record.node.position,record.target)<0.85 and Game.minute>=float(record.due)-Game.MEETING_ARRIVAL_MINUTES:
+		record.state = "waiting"
+
+func _remove_meeting_actor(id: String) -> void:
+	var actor: Node3D = meeting_actors[id]
+	for record: Dictionary in _pedestrian_neighbors:
+		if record.has("neighbors"): record.neighbors.erase(actor)
+	_grounding_cache.erase(actor.get_instance_id())
+	meeting_actors[id].queue_free()
+	meeting_actors.erase(id)
+	meeting_walks.erase(id)
 
 func _sample_route(route: PackedVector3Array, fraction: float) -> Dictionary:
 	var length := 0.0
@@ -564,8 +891,30 @@ func _horizontal_distance(a: Vector3,b: Vector3) -> float:
 func _heading(direction: Vector3) -> float:
 	return atan2(direction.x,direction.z)
 
+func _model_in_camera_view(actor: Node3D) -> bool:
+	if not player.camera or not player.camera.is_inside_tree(): return true
+	var camera := player.camera
+	var at := actor.global_position+Vector3.UP
+	if camera.is_position_behind(at): return false
+	# Extra room covers fast camera travel between five-Hz checks. Only skeletal
+	# animation sleeps; bodies keep their routes, collision, visibility and labels.
+	return camera.get_viewport().get_visible_rect().grow(120.0).has_point(camera.unproject_position(at))
+
+func _update_animation_lod() -> void:
+	for record: Dictionary in citizens+police:
+		_set_model_animation_active(record.node)
+	for actor: Node3D in meeting_actors.values(): _set_model_animation_active(actor)
+	if is_instance_valid(friend): _set_model_animation_active(friend)
+
+func _set_model_animation_active(actor: Node3D) -> void:
+	var model: Node = actor.get_meta("model",null)
+	if not model: return
+	var wanted := Node.PROCESS_MODE_INHERIT if actor.visible and _model_in_camera_view(actor) else Node.PROCESS_MODE_DISABLED
+	if model.process_mode!=wanted: model.process_mode = wanted
+
 func _set_person_visible(actor: Node3D, show_actor: bool) -> void:
+	if actor.visible==show_actor: return
 	actor.visible = show_actor
 	var model: Node = actor.get_meta("model",null)
 	if model:
-		model.process_mode = Node.PROCESS_MODE_INHERIT if show_actor else Node.PROCESS_MODE_DISABLED
+		model.process_mode = Node.PROCESS_MODE_INHERIT if show_actor and _model_in_camera_view(actor) else Node.PROCESS_MODE_DISABLED

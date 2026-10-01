@@ -4,6 +4,11 @@ extends CharacterBody3D
 signal attacked(kind: String)
 signal mode_changed
 
+const SKATEBOARD_LENGTH := 1.4
+const SKATEBOARD_WIDTH := 0.48
+const SKATEBOARD_HEIGHT := 0.19
+const SKATEBOARD_DECK_HEIGHT := 0.17
+
 var visual: Node3D
 var board: Node3D
 var marker: MeshInstance3D
@@ -14,6 +19,7 @@ var blocked := false
 var attack_cooldown := 0.0
 var walk_time := 0.0
 var camera: Camera3D
+var city_world: Node3D
 var body_shape: CollisionShape3D
 var car_shape: CollisionShape3D
 var weapon: Node3D
@@ -22,6 +28,9 @@ var last_safe_position := Vector3(20,0.3,50)
 var last_position := Vector3(20,0.3,50)
 var was_driving := false
 var last_attack_kind := ""
+var _grounded_position := Vector3.INF
+var _grounded_heading := INF
+var _grounded_board := false
 
 func _ready() -> void:
 	name = "Player"
@@ -44,10 +53,14 @@ func _ready() -> void:
 	add_child(car_shape)
 	visual = ActorVisuals.model("Characters", "character-male-f", 1.85)
 	add_child(visual)
-	board = ActorVisuals.model("Skateboard", "skateboard", 0.16)
-	board.position.y = 0.02
+	# Size a flat prop by its deck length, not its very small vertical extent.
+	# Keep it beside the character model so the riding pose cannot shrink it.
+	board = ActorVisuals.model("Skateboard", "skateboard", 1.0)
+	var board_bounds := ActorVisuals.bounds_of(board)
+	board.scale = Vector3(SKATEBOARD_WIDTH, SKATEBOARD_HEIGHT, SKATEBOARD_LENGTH) / board_bounds.size
+	board.position.y = 0.015
 	board.visible = false
-	visual.add_child(board)
+	add_child(board)
 	weapon = ActorVisuals.model("Blasters", "blaster-a", 0.22)
 	weapon.position = Vector3(0.36,1.03,0.38)
 	weapon.visible = false
@@ -59,6 +72,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if blocked or Game.paused or Game.status != "playing":
 		velocity = Vector3.ZERO
+		_update_grounding()
 		return
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	if position.distance_squared_to(last_position) > 1600.0:
@@ -127,16 +141,17 @@ func _physics_process(delta: float) -> void:
 	last_position = position
 	if direction.length() > 0.08:
 		facing = direction.normalized()
-		visual.rotation.y = lerp_angle(visual.rotation.y, atan2(facing.x, facing.z), delta * 12)
 		walk_time += delta
 		if attack_cooldown <= 0.25:
 			ActorVisuals.play(visual, "crouch" if skateboarding else ("sprint" if sprinting else "walk"))
 	elif attack_cooldown <= 0.25:
-		ActorVisuals.play(visual, "idle")
-	if skateboarding:
-		visual.position.y = 0.14
-	else:
-		visual.position.y = 0.0
+		ActorVisuals.play(visual, "crouch" if skateboarding else "idle")
+	var travel_heading := atan2(facing.x, facing.z)
+	# A sideways stance puts both feet along the deck while its nose follows travel.
+	if not driving or direction.length() > 0.08:
+		visual.rotation.y = lerp_angle(visual.rotation.y, travel_heading + (PI * 0.5 if skateboarding else 0.0), minf(1.0, delta * 12))
+	board.rotation.y = lerp_angle(board.rotation.y, travel_heading, minf(1.0, delta * 12))
+	_update_grounding()
 	if vehicle:
 		vehicle.global_position = global_position
 		vehicle.rotation.y = lerp_angle(vehicle.rotation.y, visual.rotation.y, delta * 7)
@@ -145,6 +160,31 @@ func _physics_process(delta: float) -> void:
 		visual.visible = true
 	board.visible = skateboarding and not vehicle
 	weapon.visible = last_attack_kind == "shoot" and int(Game.inventory.get("pistol",0)) > 0 and attack_cooldown > 0.15 and not skateboarding and not vehicle
+
+func _update_grounding() -> void:
+	if not visual or not city_world: return
+	if global_position.distance_squared_to(_grounded_position)<0.000001 and absf(board.rotation.y-_grounded_heading)<0.001 and skateboarding==_grounded_board: return
+	_grounded_position = global_position
+	_grounded_heading = board.rotation.y
+	_grounded_board = skateboarding
+	var support: float = city_world.walkable_surface_height(global_position)
+	if skateboarding and not vehicle:
+		# Support the whole wheelbase as it straddles a curb or planted island edge.
+		for x: float in [-SKATEBOARD_WIDTH*0.5,0.0,SKATEBOARD_WIDTH*0.5]:
+			for z: float in [-SKATEBOARD_LENGTH*0.5,0.0,SKATEBOARD_LENGTH*0.5]:
+				var sample := global_position+board.basis.orthonormalized()*Vector3(x,0,z)
+				support = maxf(support,city_world.walkable_surface_height(sample))
+	else:
+		for offset: Vector3 in [Vector3(0.25,0,0),Vector3(-0.25,0,0),Vector3(0,0,0.25),Vector3(0,0,-0.25)]:
+			support = maxf(support,city_world.walkable_surface_height(global_position+offset))
+	var grounded_offset := support-global_position.y
+	visual.position.y = grounded_offset+(SKATEBOARD_DECK_HEIGHT if skateboarding else 0.0)
+	board.position.y = grounded_offset+0.015
+	var ring_support := support
+	for index in 8:
+		var angle := TAU*float(index)/8.0
+		ring_support = maxf(ring_support,city_world.walkable_surface_height(global_position+Vector3(cos(angle),0,sin(angle))*0.68))
+	marker.position.y = ring_support-global_position.y+0.04
 
 func toggle_skateboard() -> void:
 	if vehicle or blocked or Game.paused or Game.status != "playing":
@@ -177,6 +217,7 @@ func attack(kind: String) -> void:
 	attacked.emit(kind)
 
 func reset_travel() -> void:
+	_grounded_position = Vector3.INF
 	vehicle = null
 	skateboarding = false
 	exhausted = false

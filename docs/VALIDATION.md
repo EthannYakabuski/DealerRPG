@@ -6,14 +6,17 @@ The build script rejects nonzero exits and Godot script/runtime errors before ex
 
 | Suite | Verified behavior |
 | --- | --- |
-| `test_game_state.gd` | 94 campaign checks: tutorial sequence, meeting windows, quantity and money accounting, fair-price relationships, referrals, supplier reputation gates and risk, food/capacity, class attendance, parties, recovery work, purchased vehicles, corrupt saves, terminal loss/restart, and a complete earned-money tuition victory. The campaign simulation wins after 56 sales and eight supplier pickups on day three. |
-| `test_interface.gd` | 36 checks using the actual scene, buttons and interaction dispatcher: start, packing, tutorial handoff, saving a contact, scheduling, client handoff, market purchase/entry/exit, phone pages, dealership purchase, room-position resume, class attendance, tuition result, and terminal Escape behavior. |
-| `test_population.gd` | 63 checks: real scene geometry and patrol sight lines, district jurisdiction, arrest persistence, escape, reload preserving pursuit/arrest progress, body movement/collisions, stamina, skateboard, firearm and ammo accounting, combat reactions, car theft/ownership/safe exits, meeting arrival/reach, validated physical save data and sustained simulation. |
+| `test_game_state.gd` | 143 campaign checks: tutorial sequence, meeting windows, quantity and money accounting, relationships, referrals, suppliers, food/capacity, classes, parties, recovery work, cars, corrupt saves, terminal loss/restart, and an earned-money tuition victory. Customer cooldowns persist across saves, old saves migrate, and malformed walking-arrival records are rejected safely. The slower-paced campaign wins after 58 sales and eight supplier pickups on day five. |
+| `test_interface.gd` | 48 checks using the actual scene, buttons and interaction dispatcher: start, packing, tutorial handoff, delayed first text, scheduling, Agenda wait, walking arrivals with the clock running, approaching/arrived actor save and resume, punctual relationship rewards, shop/interior interactions, phone pages, cars, class attendance, tuition result, and terminal Escape behavior. |
+| `test_population.gd` | 97 checks covering real geometry and patrol sight lines, jurisdiction, pursuit/arrest persistence, escape, movement/collisions, stamina, skateboard, combat, vehicles, walking arrivals/departures and saved actor positions. All twelve moving cars progress over five simulated minutes without gridlock or same-lane overlap. Groups retain shoulder room after sustained walking. The police cruiser witnesses crime. Board/feet grounding and traversal are checked on grass, paving, island tops and edges. |
+| `test_feedback.gd` | 50 checks covering the live meeting card, earliest client/supplier priority, game-time countdown, clickable existing directions, completion/cancellation, actual transaction values including cents, success-only sounds, concurrent click/event playback, mute controls, terminal arrest audio and the revised Agenda wait button. |
 | `test_world.gd` | Original model availability, twelve accessible landmarks, no road/building or pedestrian/building intersections, traffic lane samples on road surfaces, parking, five enter/exit interior transitions, and Compatibility camera-cutaway restoration. |
 | `smoke_test.gd` | 62 full-scene checks covering import/animation, world assembly, movement, board, menus, interiors, navigation and lighting. |
 | `test_visuals.gd` | 9 animation cache checks covering clip selection, uninterrupted playback, nonlooping actions, missing clips, replacement players and changed libraries. |
 
 Some tests deliberately isolate their domain: interface testing moves patrols away before its staged handoff; population tests separately verify witnessed sales, pursuit and arrest. Campaign balance is tested using time advancement, while browser checks below exercise actual input and rendering.
+
+Independent real-clock probes placed the player and actual game camera at all six selectable meeting locations. Normal ninety-minute schedules and Agenda skips to thirty minutes before the appointment produced arrivals approximately twelve minutes early. Short-notice thirty-minute schedules arrived 8.5–12 minutes early, within reach, without missed appointments or late penalties. Real JSON save/resume preserved both approaching and waiting actors with zero position change.
 
 ## Visual iteration
 
@@ -24,6 +27,8 @@ The game uses Compatibility-supported cached alpha-material cutaways instead of 
 The performance pass caches actor animation lookups, redraws the minimap at ten updates per second, and replaces fifty over-detailed streetlamp bulb spheres with one shared low-detail mesh. The bulbs occupy only a few pixels and no longer cast unnecessary shadows.
 
 On this machine's GeForce GT 1030, a five-second unpaused Chrome campus sample after these changes averaged 33 FPS with a 34 ms 95th-percentile frame interval. An earlier sample at the same player position averaged 24 FPS with a 66 ms interval. The clock and pedestrian positions differed between samples, so this is a useful local observation rather than a controlled benchmark or a performance guarantee. Native Compatibility rendering reached 60 FPS in the campus scene. Other browsers, GPUs, resolutions and busy scenes can differ.
+
+The player-feedback iteration initially regressed to 9–17 FPS, which was caught before publication. Local neighbor lists, cached ground support/visual parts, and camera-based animation culling recovered a final campus sample to 31.3 FPS (49.6 ms 95th percentile), compared with 32.6 FPS (33.5 ms) for the previous public release sampled on the same machine. Offscreen bodies continue moving; only their skeletal animation processing pauses, with a 120-pixel camera margin. Eighty camera-follow checks verified that visible actors stay animated and offscreen patrols continue walking. The final full build passed all 409 counted checks plus world geometry/cutaway validation, and the final exported browser startup, skateboard movement and camera-follow actions produced no console errors, exceptions or failed network requests.
 
 ## Browser execution
 
@@ -39,6 +44,8 @@ Observed input sequence:
 6. Open pause, save, reload the browser, select Continue, and verify time, cash, position and skateboard restore.
 
 Browser screenshots and console reports are generated under ignored `build/screenshots/` and `build/logs/`. A browser-only missing arrow glyph was replaced with ASCII in the release source. This verification targets desktop browsers; touch controls and mobile-device performance are not part of this version.
+
+The player-feedback iteration was also exercised in the exported browser build: the tutorial displayed a `+$20` receipt, saving Milo left an empty inbox, his first text arrived after the introductory wait, and a new appointment created the live HUD card. Clicking it activated the existing directions without opening a menu. Agenda waiting left thirty game minutes for a visible approach, and the resulting handoff displayed `+$44`, raised cash to `$86`, removed the appointment card and left no immediate repeat request. Saving and reloading preserved the cash, clock, skateboard and active pursuit; the nearby patrol then completed an arrest. The recorded `iteration-web-*` actions produced no console errors, exceptions or failed network requests.
 
 ## Hosting
 

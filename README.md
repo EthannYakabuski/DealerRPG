@@ -26,7 +26,9 @@ Use a desktop browser with WebGL 2 and WebAssembly support. The game uses a sing
 | Mouse wheel | Zoom |
 | Escape | Close menu / pause |
 
-Menus pause the clock. A handoff can happen shortly before or after the scheduled time; close friends wait longer. At a meeting location, the Agenda can advance time until the appointment. Supplier pickups are physical meetings, not instant deliveries.
+Menus pause the clock. Clients walk to meetings about twelve game minutes early; close friends wait longer if you are late. Click the upcoming meeting card on the main HUD for directions. At a meeting location, the Agenda can skip ahead to thirty minutes before the appointment, leaving time to watch your contact walk in. Supplier pickups are physical meetings, not instant deliveries.
+
+Milo's first follow-up arrives about ninety game minutes after saving his number. After later sales, customers wait six to eight game hours, plus extra time for larger orders, before requesting more. Other contacts can still text during that interval.
 
 ## Systems
 
@@ -35,7 +37,8 @@ Menus pause the clock. A handoff can happen shortly before or after the schedule
 - Three suppliers with different reputation gates, prices, stock quality and bust risk.
 - A finite backpack, food, energy, skateboard, late-game firearm/ammunition and owned car.
 - Campus security and city police with visibility-based detection, pursuit, escape and hardcore arrest.
-- Animated pedestrians, small social groups, daily destination changes, road traffic and parked vehicles.
+- Animated pedestrians, spaced social groups, daily destination changes, flowing road traffic, a roaming police cruiser and parked vehicles.
+- Live meeting countdowns, clickable directions, transaction pop-ups and original sounds for packing, sales, purchases, texts and police events.
 - Vehicle theft, recognizable stolen cars, on-foot melee and ranged combat reactions.
 - Classes, paid campus shifts, sleep, evening parties, and incremental tuition payments.
 - Morning, afternoon, evening, dusk and night lighting; warm shop and interior lights.

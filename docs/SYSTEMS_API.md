@@ -14,6 +14,7 @@ Signals:
 - `notification(text: String)` — short user-facing feedback, including why a transaction failed.
 - `ended(won: bool, reason: String)` — terminal campaign result.
 - `crime_committed(severity: float)` — world witnesses decide whether to pursue. Minor handoff ~14, supplier setup 65, gunfire 65. Ordinary hidden crimes add small passive attention; this signal is **not** an automatic capture.
+- `feedback_event(kind: String, value: float)` — success-only sound and visual cues. Kinds: `pack`, `purchase`, `sale`, `text`, `caught`, `consume`, `tuition`, `class`, `party`. Transaction values are signed cash changes (party reports net proceeds after supplies); other values are zero. Loading a save and failed transactions never replay these cues.
 
 Call `set_heat(value)` for police attention, `take_damage(amount)` for injuries, and `caught_by_police()` for terminal arrest. `finish_game(won, reason)` is also available. An ended campaign rejects new transactions and persists its result; restarting resets everything.
 
@@ -25,7 +26,9 @@ Inventory keys: `flower`, `dime_bag`, `sandwich`, `energy_drink`, `skateboard`, 
 
 `current_objective()` is the tutorial/campaign guidance text. Tutorial sequence is `split_flower()` → contextual `tutorial_sell()` → phone `add_tutorial_contact()`. It is safe and clock-frozen until all three steps complete.
 
-Contacts contain `id`, `name`, `relationship` (0–100), `sales`, `last_sale_minute`. Inbox dictionaries contain `id`, `contact_id`, `contact_name`, `quantity`, `text`, `status` (`new`, `accepted`, `expired`), `created_minute`, `expires_minute`, `suggested_price`. Relationships improve with fair pricing, quality and punctuality; regular referrals unlock more contacts as reputation grows.
+Contacts contain `id`, `name`, `relationship` (0–100), `sales`, `last_sale_minute`, `last_order_quantity`, `next_request_minute`. Inbox dictionaries contain `id`, `contact_id`, `contact_name`, `quantity`, `text`, `status` (`new`, `accepted`, `expired`), `created_minute`, `expires_minute`, `suggested_price`. Relationships improve with fair pricing, quality and punctuality; regular referrals unlock more contacts as reputation grows.
+
+Milo's first follow-up arrives 90 game minutes after the tutorial purchase. Subsequent purchases impose a persisted per-contact cooldown of 6–8 hours plus 30 minutes for each extra bag. Customers only text between 07:00 and 23:00 and cannot have duplicate pending requests or scheduled meetings. Cancellation/no-shows allow at least four hours before retrying. Party guests also receive a purchase cooldown. Existing version-2 saves derive the new timing from sale history while retaining accepted appointments.
 
 ## Meetings and suppliers
 
@@ -42,7 +45,7 @@ Contacts contain `id`, `name`, `relationship` (0–100), `sales`, `last_sale_min
 | `tier`, `quality`, `risk` | Supplier metadata; clients have tier -1, quality 0 and no risk field |
 | `status`, `created_minute` | `scheduled`, `completed`, `missed` or `cancelled` |
 
-`complete_meeting(meeting_id) -> bool` checks status, location, stock/cash/capacity, and arrival window. NPCs can trade **25 minutes before** due time, and wait **25–45 minutes after** based on relationship. `cancel_meeting(meeting_id)` applies a smaller relationship penalty than a no-show. Failed stock/location/time checks do not consume anything. Repeated handoffs cannot duplicate rewards.
+`complete_meeting(meeting_id) -> bool` checks status, location, stock/cash/capacity, and arrival window. NPCs can trade **12 minutes before** due time (`MEETING_ARRIVAL_MINUTES`), and wait **25–45 minutes after** based on relationship (`MEETING_WINDOW` plus relationship grace). `cancel_meeting(meeting_id)` applies a smaller relationship penalty than a no-show. Failed stock/location/time checks do not consume anything. Repeated handoffs cannot duplicate rewards.
 
 `supplier_catalog()` returns three suppliers. `supplier_order(tier, bundles)` creates a meeting at `car_park` at least 60 minutes away. Cash is charged and bundles arrive only on handoff. Reputation gates are 0 / 8 / 22, prices are $46 / $40 / $33 per bundle, qualities are 0.72 / 0.87 / 0.98. Each bundle splits into six bags; quality averages when stocks mix. Supplier risk is exposed in the meeting; a rolled setup emits severity 65 with a warning, giving the world a chance to pursue rather than instantly ending the run.
 
@@ -67,6 +70,8 @@ All transaction methods return a success bool. Failed actions emit a notificatio
 `save_game()` writes version-2 JSON through a temporary file and rename. `load_game(show_message = true)` validates before applying; `restart_game(delete_save = true)` restores starting state. Save path is `user://deerfield_save_v2.json`. Browser `user://` uses the engine's persistent storage. Autosave runs every 20 active seconds; tutorial completion, sleep and endings also save. Set a different `save_path` before adding a standalone state instance to a scene tree when testing.
 
 `world_state` is an optional, backward-compatible dictionary. The world captures `position: [x,y,z]`, `interior`, `vehicle_owned_pos`, `driving`, `stolen_vehicle`, `pursuit`, `skateboarding` and `car_rotation`. Positions must be finite and within the exterior or correct room bounds; invalid data falls back to the campus spawn. Indoor saves cannot restore driving/skateboarding. Capture this state before saving so physical location and police state stay consistent with the campaign clock.
+
+Optional `world_state.meeting_walks` validates up to ten client/supplier actor records. The world captures approaching and waiting actors for active appointments; completed departures are cosmetic and are not restored. Each record contains numeric `id`, exterior `position` and `target` arrays, `state`, and absolute `start_minute` / `due` times. Invalid entries and duplicate IDs are skipped independently; oversized or malformed containers are ignored. Missing data remains compatible with earlier saves.
 
 Run the integration suite with Godot 4.5.1:
 

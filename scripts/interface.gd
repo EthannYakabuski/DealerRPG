@@ -27,6 +27,13 @@ var refresh_pending := false
 var refresh_elapsed := 0.0
 var sfx: AudioStreamPlayer
 var sounds: Dictionary = {}
+var feedback_voices: Array[AudioStreamPlayer] = []
+var feedback_voice_cursor := 0
+var sound_enabled := true
+var meeting_card: Button
+var meeting_location := ""
+var money_feedback: Array[Control] = []
+const EVENT_SOUNDS: Array[String] = ["pack", "purchase", "sale", "text", "caught", "detected", "consume", "tuition", "class", "party"]
 var tips := ["WASD move  ·  SHIFT run  ·  SPACE skateboard", "TAB phone  ·  B backpack  ·  M city map", "E interact  ·  V enter / exit vehicle", "J punch  ·  K kick  ·  L shoot  ·  ESC pause"]
 
 func _ready() -> void:
@@ -41,10 +48,19 @@ func _ready() -> void:
 	add_child(sfx)
 	for sound in ["click-a","tap-b","switch-a"]:
 		sounds[sound]=load("res://art/audio/%s.ogg"%sound)
+	for sound in EVENT_SOUNDS:
+		sounds[sound]=load("res://art/audio/feedback/%s.wav"%sound)
+	# Separate voices keep a menu click or another text from cutting off a sale.
+	for i in range(5):
+		var voice:=AudioStreamPlayer.new()
+		voice.volume_db=-12
+		add_child(voice)
+		feedback_voices.append(voice)
 	_build_hud()
 	_build_title()
 	Game.changed.connect(func(): refresh_pending=true)
 	Game.notification.connect(show_toast)
+	Game.feedback_event.connect(_on_feedback_event)
 	_update_hud()
 
 func _theme() -> Theme:
@@ -150,6 +166,7 @@ func _build_hud() -> void:
 	brand_box.add_child(_label("NIGHT SCHOOL",26,LIME))
 	labels.district=_label("DEERFIELD / CAMPUS",12,MUTED)
 	brand_box.add_child(labels.district)
+	_build_meeting_card()
 	var clock_panel:=PanelContainer.new()
 	clock_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	clock_panel.position=Vector2(-125,22)
@@ -344,25 +361,153 @@ func _update_hud() -> void:
 		labels.route.text=""
 	if game_root.population.pursuit:
 		labels.objective.text="Patrols are pursuing you. Get out of sight for 10 seconds.\nEscape: %ds / 10"%int(game_root.population.escape_seconds)
+	_update_meeting_card()
+
+func _build_meeting_card() -> void:
+	meeting_card=Button.new()
+	meeting_card.name="UpcomingMeetingCard"
+	meeting_card.position=Vector2(24,126)
+	meeting_card.size=Vector2(290,206)
+	meeting_card.mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND
+	meeting_card.focus_mode=Control.FOCUS_NONE
+	meeting_card.add_theme_stylebox_override("normal",_style(Color(0.07,0.12,0.10,0.94),9,0))
+	meeting_card.add_theme_stylebox_override("hover",_style(Color(0.14,0.22,0.15,0.97),9,0))
+	meeting_card.add_theme_stylebox_override("pressed",_style(Color(0.20,0.29,0.17,0.98),9,0))
+	meeting_card.pressed.connect(_route_upcoming_meeting)
+	hud.add_child(meeting_card)
+	var box:=VBoxContainer.new()
+	box.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	box.position=Vector2(16,14)
+	box.size=Vector2(258,178)
+	box.add_theme_constant_override("separation",5)
+	meeting_card.add_child(box)
+	labels.meeting_heading=_label("NEXT MEETING",11,LIME)
+	labels.meeting_countdown=_label("",28,CREAM)
+	labels.meeting_contact=_label("",18,CREAM)
+	labels.meeting_place=_label("",14,MUTED)
+	labels.meeting_place.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+	labels.meeting_time=_label("",12,MUTED)
+	labels.meeting_hint=_label("CLICK FOR DIRECTIONS",11,LIME)
+	for field in ["meeting_heading","meeting_countdown","meeting_contact","meeting_place","meeting_time","meeting_hint"]:
+		box.add_child(labels[field])
+
+func meeting_countdown(due_minute:float) -> String:
+	var remaining:float=due_minute-Game.minute
+	if remaining>0:
+		var minutes:int=int(ceil(remaining))
+		return "IN %dh %02dm"%[int(minutes/60.0),minutes%60] if minutes>=60 else "IN %dm"%minutes
+	if remaining>-1:
+		return "MEET NOW"
+	return "%dm LATE"%int(floor(-remaining))
+
+func _update_meeting_card() -> void:
+	var upcoming:Array[Dictionary]=Game.active_meetings()
+	meeting_card.visible=Game.tutorial_step>=3 and Game.status=="playing" and not upcoming.is_empty()
+	if upcoming.is_empty():
+		meeting_location=""
+		return
+	var meeting:Dictionary=upcoming[0]
+	meeting_location=str(meeting.location_id)
+	labels.meeting_heading.text="NEXT PICKUP" if meeting.type=="supplier" else "NEXT MEETING"
+	labels.meeting_countdown.text=meeting_countdown(float(meeting.due_minute))
+	labels.meeting_countdown.add_theme_color_override("font_color",RED if Game.minute>float(meeting.due_minute)+1 else (AMBER if float(meeting.due_minute)-Game.minute<=15 else CREAM))
+	labels.meeting_contact.text=str(meeting.contact_name)
+	labels.meeting_place.text=Data.location_name(meeting_location)
+	labels.meeting_time.text="%s  ·  %d %s"%[Game.format_minute(float(meeting.due_minute)),int(meeting.quantity),"bundles" if meeting.type=="supplier" else "bags"]
+	labels.meeting_hint.text="CLICK FOR DIRECTIONS"+ ("  /  +%d LATER"%(upcoming.size()-1) if upcoming.size()>1 else "")
+	meeting_card.tooltip_text="Set directions to "+Data.location_name(meeting_location)+". The clock keeps running."
+
+func _route_upcoming_meeting() -> void:
+	_update_meeting_card()
+	if meeting_location!="":
+		_play_sound("click-a")
+		game_root.navigate(meeting_location)
+
+func _on_feedback_event(kind:String,value:float) -> void:
+	if not game_root.started:
+		return
+	_play_feedback_sound(kind)
+	if value!=0 and kind in ["sale","purchase","tuition","party"]:
+		_show_money_feedback(kind,value)
+
+func _play_feedback_sound(kind:String) -> void:
+	if not sound_enabled or not sounds.has(kind):
+		return
+	var chosen:AudioStreamPlayer=null
+	for voice in feedback_voices:
+		if not voice.playing:
+			chosen=voice
+			break
+	if chosen==null:
+		chosen=feedback_voices[feedback_voice_cursor]
+		feedback_voice_cursor=(feedback_voice_cursor+1)%feedback_voices.size()
+	chosen.stream=sounds[kind]
+	chosen.play()
+
+func _show_money_feedback(kind:String,value:float) -> void:
+	# Three bounded, short-lived cards allow rapid purchases without an ever-growing
+	# stack. Their tweens run independently of the paused simulation clock.
+	while money_feedback.size()>=3:
+		var oldest:Control=money_feedback.pop_front()
+		if is_instance_valid(oldest):
+			oldest.queue_free()
+	for existing in money_feedback:
+		if is_instance_valid(existing):
+			existing.position.y+=82
+	var panel:=PanelContainer.new()
+	panel.name="MoneyFeedback"
+	panel.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	panel.position=Vector2(-300,245)
+	panel.size=Vector2(276,70)
+	panel.add_theme_stylebox_override("panel",_style(Color(0.06,0.13,0.085,0.96),9,12))
+	root.add_child(panel)
+	money_feedback.append(panel)
+	var box:=VBoxContainer.new()
+	box.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	box.add_theme_constant_override("separation",1)
+	panel.add_child(box)
+	box.add_child(_label(("+$" if value>0 else "-$")+_money(absf(value)),30,LIME if value>0 else AMBER))
+	var caption:String={"sale":"SALE COMPLETE","purchase":"PURCHASE COMPLETE","tuition":"TUITION PAYMENT","party":"PARTY EARNINGS"}.get(kind,"TRANSACTION")
+	box.add_child(_label(caption,11,MUTED))
+	panel.modulate.a=0
+	panel.scale=Vector2(0.96,0.96)
+	var tween:=create_tween().bind_node(panel)
+	tween.set_parallel(true)
+	tween.tween_property(panel,"modulate:a",1.0,0.16)
+	tween.tween_property(panel,"scale",Vector2.ONE,0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.chain().tween_interval(1.8)
+	tween.chain().tween_property(panel,"modulate:a",0.0,0.6)
+	tween.chain().tween_callback(func():money_feedback.erase(panel);panel.queue_free())
+
+func set_sound_enabled(enabled:bool) -> void:
+	sound_enabled=enabled
+	if game_root.ambient:
+		game_root.ambient.stream_paused=not enabled
+	if not enabled:
+		sfx.stop()
+		for voice in feedback_voices:
+			voice.stop()
 
 func _money(value:float) -> String:
-	var number:=str(int(ceil(value)))
+	# Party proceeds and final tuition payments can include cents. The balance
+	# and the receipt must agree, without advertising money the player cannot spend.
+	var cents:int=int(round(value*100.0))
+	var number:=str(int(cents/100.0))
 	var result:=""
 	for i in range(number.length()):
 		if i>0 and (number.length()-i)%3==0:
 			result+=","
 		result+=number[i]
-	return result
+	return result+(".%02d"%(cents%100) if cents%100!=0 else "")
 
 func show_toast(text:String) -> void:
 	toast.text=text
 	toast_timer=6.0
 	toast_panel.move_to_front()
-	if game_root.started:
-		_play_sound("tap-b")
 
 func _play_sound(id:String) -> void:
-	if sfx and sounds.has(id):
+	if sound_enabled and sfx and sounds.has(id):
 		sfx.stream=sounds[id]
 		sfx.play()
 
@@ -462,6 +607,9 @@ func _build_page() -> void:
 		"confirm_restart":_restart_page()
 		_:_help_page()
 	toast_panel.move_to_front()
+	for feedback in money_feedback:
+		if is_instance_valid(feedback):
+			feedback.move_to_front()
 
 func _heading(title:String,subtitle:String="") -> void:
 	body.add_child(_label(title,30,CREAM))
@@ -497,7 +645,7 @@ func _messages_page() -> void:
 		_button("CHECK YOUR AGENDA",func():show_page("agenda"))
 
 func _schedule_page() -> void:
-	_heading("Meet "+str(selected_message.get("contact_name","a contact")),"Your choices affect trust. Aim to arrive within 25 minutes of the agreed time.")
+	_heading("Meet "+str(selected_message.get("contact_name","a contact")),"Arrive on time for full trust. Contacts aim to be there about 12 minutes early.")
 	var card:=_card()
 	card.add_child(_label("MEETING PLACE",12,LIME))
 	var location:=OptionButton.new()
@@ -563,8 +711,16 @@ func _agenda_page() -> void:
 		var due:float=meeting.due_minute
 		_button("GET DIRECTIONS",func():game_root.navigate(loc);close_page(),row,true)
 		_button("Cancel",func():Game.cancel_meeting(id),row)
-		if game_root.closest_location==loc and due>Game.minute:
-			_button("WAIT HERE UNTIL %s"%Game.format_minute(due),func():Game.advance_time(maxf(0,due-Game.minute));close_page(),card)
+		if game_root.closest_location==loc:
+			var arrival:float=due-Game.MEETING_ARRIVAL_MINUTES
+			var walk_in:float=due-30.0
+			if Game.minute<walk_in:
+				_paragraph("Skip ahead, then watch your contact walk over. They aim to arrive around %s."%Game.format_minute(arrival),card)
+				_button("WAIT UNTIL %s"%Game.format_minute(walk_in),func():Game.advance_time(maxf(0,walk_in-Game.minute));close_page(),card)
+			elif Game.minute<arrival:
+				_paragraph("Your contact should arrive around %s. Close your phone while they make their way here."%Game.format_minute(arrival),card,AMBER)
+			else:
+				_paragraph("The arrival window is open. Close your phone and meet your contact in person.",card,AMBER)
 	if Game.active_meetings().is_empty():
 		_paragraph("No meetings scheduled. Check your messages or arrange a supplier pickup.")
 
@@ -694,7 +850,7 @@ func _pause_page() -> void:
 	_heading("Take a breath","Your story is saved automatically. The clock pauses while any menu is open.")
 	_button("RESUME",close_page,body,true)
 	_button("SAVE STORY",func():Game.save_game();show_toast("Story saved in this browser."))
-	_button("SOUND ON / OFF",func():game_root.ambient.stream_paused=not game_root.ambient.stream_paused)
+	_button("SOUND: %s"%("ON" if sound_enabled else "OFF"),func():set_sound_enabled(not sound_enabled);_build_page())
 	_button("CONTROLS",func():show_page("help"))
 	_button("START OVER",func():show_page("confirm_restart"))
 
@@ -709,7 +865,7 @@ func _help_page() -> void:
 		var card:=_card()
 		card.add_child(_label(tip,18,CREAM))
 	_paragraph("Mouse wheel changes camera distance. Click map landmarks for directions. Menus pause the clock. Close a menu with its Close button, Escape, or the same shortcut.")
-	_paragraph("MEETINGS: Pack stock in your backpack, answer a text, choose a place/time/price, follow the map, and press E to hand off. If early, open Agenda at the meeting spot and wait.")
+	_paragraph("MEETINGS: Pack stock in your backpack, answer a text, choose a place/time/price, follow the map, and press E to hand off. If early, Agenda can skip ahead to 30 minutes before the meeting. Close your phone and watch your contact walk over; they aim to arrive 12 minutes early. The clock pauses in menus.")
 	_paragraph("SURVIVAL: Eat sandwiches, attend class daily between 09:00 and 10:00, and sleep at home. Three missed classes means eviction. Campus shifts can help recover seed money.")
 	_paragraph("POLICE: Visible crimes and identified stolen cars trigger pursuit. Break line of sight for 10 seconds. A patrol close enough for 2.3 seconds arrests you and ends the run.")
 	_paragraph("PROGRESSION: On-time sales and good value grow relationships. Contacts introduce friends. Reputation unlocks better suppliers and a car. Pay tuition from the phone to win.")

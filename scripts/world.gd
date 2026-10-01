@@ -16,6 +16,7 @@ const INK := Color("23383b")
 const CAMPUS := Color("87c5b0")
 const SHOP := Color("f0bd71")
 const HOME := Color("c4aed8")
+const SURFACE_CELL := 8.0
 
 var landmarks: Dictionary = {}
 var spawn_position := Vector3(20.0, 0.2, 50.0)
@@ -41,6 +42,8 @@ var _rng := RandomNumberGenerator.new()
 var _labels: Array[Label3D] = []
 var _occluders: Array[Dictionary] = []
 var _fade_materials: Dictionary = {}
+var _walkable_surfaces: Array[Dictionary] = []
+var _surface_cells: Dictionary = {}
 
 func _ready() -> void:
 	_rng.seed = 26813
@@ -63,6 +66,9 @@ func _ready() -> void:
 	_create_routes()
 	_create_interiors()
 	_create_markers()
+	_index_ground_primitives()
+	for cell: Vector2i in _surface_cells:
+		_surface_cells[cell].sort_custom(func(a: int,b: int) -> bool: return float(_walkable_surfaces[a].height)>float(_walkable_surfaces[b].height))
 	_batch.flush(exterior)
 	road_polylines.assign(map_roads)
 	set_night(0.0)
@@ -223,6 +229,7 @@ func _ribbon(points: PackedVector3Array, width: float, height: float, color: Col
 		var c := points[i+1]+edges[i+1]+Vector3.UP*height
 		var d := points[i+1]-edges[i+1]+Vector3.UP*height
 		vertices.append_array(PackedVector3Array([a,c,b,b,c,d]))
+		_register_walkable_surface(PackedVector2Array([Vector2(a.x,a.z),Vector2(c.x,c.z),Vector2(d.x,d.z),Vector2(b.x,b.z)]),height)
 		for _n in 6:
 			normals.append(Vector3.UP)
 	var arrays := []
@@ -238,6 +245,68 @@ func _ribbon(points: PackedVector3Array, width: float, height: float, color: Col
 	instance.mesh = mesh
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	exterior.add_child(instance)
+
+func _index_ground_primitives() -> void:
+	# Derive support from the exact rendered paving, paint, and planted islands.
+	# Physics stays flat, so decorative curbs never become invisible skate barriers.
+	for entry: Dictionary in _batch.groups.values():
+		for transform: Transform3D in entry.transforms:
+			var top := transform.origin.y+transform.basis.y.length()*0.5
+			if top<=0.0 or top>0.32: continue
+			var polygon := PackedVector2Array()
+			if entry.mesh is BoxMesh:
+				for corner: Vector3 in [Vector3(-0.5,0.5,-0.5),Vector3(0.5,0.5,-0.5),Vector3(0.5,0.5,0.5),Vector3(-0.5,0.5,0.5)]:
+					var point := transform*corner
+					polygon.append(Vector2(point.x,point.z))
+			elif entry.mesh is CylinderMesh:
+				for index in 16:
+					var angle := TAU*float(index)/16.0
+					var point := transform*Vector3(sin(angle)*0.5,0.5,cos(angle)*0.5)
+					polygon.append(Vector2(point.x,point.z))
+			if not polygon.is_empty(): _register_walkable_surface(polygon,top)
+
+func _register_walkable_surface(polygon: PackedVector2Array, height: float) -> void:
+	var bounds := Rect2(polygon[0],Vector2.ZERO)
+	for point: Vector2 in polygon: bounds = bounds.expand(point)
+	var index := _walkable_surfaces.size()
+	_walkable_surfaces.append({"polygon":polygon,"height":height,"bounds":bounds})
+	var first := Vector2i(floori(bounds.position.x/SURFACE_CELL),floori(bounds.position.y/SURFACE_CELL))
+	var last := Vector2i(floori(bounds.end.x/SURFACE_CELL),floori(bounds.end.y/SURFACE_CELL))
+	for x in range(first.x,last.x+1):
+		for z in range(first.y,last.y+1):
+			var cell := Vector2i(x,z)
+			if not _surface_cells.has(cell): _surface_cells[cell] = []
+			_surface_cells[cell].append(index)
+
+func walkable_surface_height(at: Vector3) -> float:
+	if at.x>400.0: return -0.005 # Interior floor has matching physical collision.
+	var height := 0.0
+	var cell := Vector2i(floori(at.x/SURFACE_CELL),floori(at.z/SURFACE_CELL))
+	var point := Vector2(at.x,at.z)
+	for index: int in _surface_cells.get(cell,[]):
+		var surface: Dictionary = _walkable_surfaces[index]
+		if surface.bounds.has_point(point) and Geometry2D.is_point_in_polygon(point,surface.polygon): return float(surface.height)
+	return height
+
+func walkable_support_height(at: Vector3, radius: float) -> float:
+	if at.x>400.0: return -0.005
+	var center := Vector2(at.x,at.z)
+	var samples := PackedVector2Array([center,center+Vector2(radius,0),center-Vector2(radius,0),center+Vector2(0,radius),center-Vector2(0,radius)])
+	var area := Rect2(center-Vector2.ONE*radius,Vector2.ONE*radius*2.0)
+	var first := Vector2i(floori(area.position.x/SURFACE_CELL),floori(area.position.y/SURFACE_CELL))
+	var last := Vector2i(floori(area.end.x/SURFACE_CELL),floori(area.end.y/SURFACE_CELL))
+	var height := 0.0
+	for x in range(first.x,last.x+1):
+		for z in range(first.y,last.y+1):
+			for index: int in _surface_cells.get(Vector2i(x,z),[]):
+				var surface: Dictionary = _walkable_surfaces[index]
+				if float(surface.height)<=height: break
+				if not surface.bounds.intersects(area): continue
+				for sample: Vector2 in samples:
+					if surface.bounds.has_point(sample) and Geometry2D.is_point_in_polygon(sample,surface.polygon):
+						height = float(surface.height)
+						break
+	return height
 
 func _create_commercial() -> void:
 	# The aerial's broad low-rise retail/parking blocks stay in the northwest.
@@ -262,7 +331,7 @@ func _create_commercial() -> void:
 		_asset("Furniture/chair",Vector3(x+1.2,0.10,-20),Vector3(0.7,1.15,0.7),-PI/2)
 	for pos in [Vector3(-103,0,-55),Vector3(-87,0,-55),Vector3(-71,0,-55)]:
 		_asset("Market/shopping-cart",pos,Vector3(0.7,1.1,1.0))
-	_parking(Vector3(-114,0,3),Vector2(10,12),PI/2,1)
+	_parking(Vector3(-112,0,0),Vector2(10,12),PI/2,1)
 	# A transit shelter borrows the same architectural palette as campus.
 	_batch.box(Vector3(-30,1.75,-88),Vector3(10,0.18,3),INK)
 	for x in [-34,-26]:
@@ -295,7 +364,7 @@ func _create_campus() -> void:
 	_batch.box(Vector3(9,2.1,64),Vector3(0.6,3.0,0.6),Color("b78c53"),0.4)
 	_batch.box(Vector3(9,3.0,64),Vector3(2.8,0.55,0.55),Color("b78c53"),-0.3)
 	_parking(Vector3(-85,0,45),Vector2(37,26),0.0,4)
-	_parking(Vector3(76,0,69),Vector2(23,14),0.0,3)
+	_parking(Vector3(81,0,66),Vector2(20,12),0.0,3)
 	for pos in [Vector3(-40,11,29),Vector3(16,11.1,86),Vector3(19,12.3,27)]:
 		_asset("Industrial_City/solar-panel-landscape-group",pos,Vector3(7,1.2,4))
 	_sign("NORTHBRIDGE COLLEGE",Vector3(-2,0,44),CAMPUS)

@@ -40,6 +40,7 @@ func _run() -> void:
 	game=root.get_node("Game")
 	game.save_path="res://.godot/interface-test-save.json"
 	game.restart_game()
+	game.set_process(false)
 	scene=load("res://main.tscn").instantiate()
 	root.add_child(scene)
 	await _settle()
@@ -61,7 +62,10 @@ func _run() -> void:
 	scene.ui.show_page("messages")
 	await _settle()
 	await _press("SAVE MILO")
-	_check(game.contacts.size()==1 and game.inbox.size()>0,"Saving contact produces demand")
+	_check(game.contacts.size()==1 and game.inbox.is_empty(),"Saving contact allows time before a repeat request")
+	game.advance_time(90.0)
+	await _settle()
+	_check(game.inbox.size()>0,"Milo texts after the introductory cooldown")
 	await _press("ARRANGE A MEETING")
 	_check(scene.ui.page=="schedule","Request opens meeting form")
 	await _press("CONFIRM MEETING")
@@ -69,11 +73,61 @@ func _run() -> void:
 	var meeting:Dictionary=game.active_meetings()[0]
 	scene.player.position=scene.world.get_landmark(meeting.location_id)
 	scene._update_location()
-	game.advance_time(maxf(0,float(meeting.due_minute)-game.minute))
-	scene.ui.close_page()
+	scene.camera.position=scene.player.position+Vector3(24,38,28)
+	scene.camera.look_at(scene.player.position)
+	scene.camera.size=37.0
+	scene.population.set_physics_process(false)
+	scene.player.set_physics_process(false)
+	scene.ui.show_page("agenda")
+	await _settle()
+	await _press("WAIT UNTIL")
+	_check(is_equal_approx(game.minute,float(meeting.due_minute)-30.0) and not game.paused,"Agenda wait leaves thirty minutes for the visible approach")
+	var actor_key:String=str(int(meeting.id))
+	var approach_start:Vector3=scene.population.meeting_actors[actor_key].position
+	for tick in range(120):
+		game.advance_time(3.0/60.0)
+		scene.population._physics_process(1.0/60.0)
+		if tick%30==0: await physics_frame
+	var saved_actor_position:Vector3=scene.population.meeting_actors[actor_key].position
+	_check(saved_actor_position.distance_to(approach_start)>2.0 and scene.population.meeting_walks[actor_key].state=="approaching","Contact visibly approaches while the normal campaign clock runs")
+	var saved_cooldown:float=game.contacts[0].next_request_minute
+	scene._capture_world_state()
+	game.save_game()
+	scene.start_game(true)
+	meeting=game.active_meetings()[0]
+	actor_key=str(int(meeting.id))
+	_check(scene.population.meeting_actors.has(actor_key),"JSON reload normalizes meeting IDs for actor lookup")
+	_check(scene.population.meeting_actors[actor_key].position.distance_to(saved_actor_position)<0.01,"Continue preserves the approaching contact without a visible teleport")
+	_check(is_equal_approx(float(game.contacts[0].next_request_minute),saved_cooldown),"Continue preserves customer cooldown during an appointment")
+	await _settle()
+	_check(game.world_state.meeting_walks.size()==1,"Load change signals preserve the captured meeting walk")
+	# Advance both the clock and actual walkers so a frozen clock cannot hide
+	# a client who would arrive after the appointment has already expired.
+	for tick in range(1800):
+		if scene.population.meeting_actor_in_reach(int(meeting.id),4.0):
+			break
+		game.advance_time(3.0/60.0)
+		scene.population._physics_process(1.0/60.0)
+		if meeting.status!="scheduled": break
+		if tick%30==0:
+			await physics_frame
+	_check(scene.population.meeting_actor_in_reach(int(meeting.id),4.0),"Client physically walks into handoff range")
+	_check(game.minute<=float(meeting.due_minute)+10.0 and meeting.status=="scheduled","Waiting on site never incurs a late arrival penalty")
+	saved_actor_position=scene.population.meeting_actors[actor_key].position
+	scene._capture_world_state()
+	game.save_game()
+	scene.start_game(true)
+	meeting=game.active_meetings()[0]
+	_check(scene.population.meeting_actor_in_reach(int(meeting.id),4.0) and scene.population.meeting_actors[actor_key].position.distance_to(saved_actor_position)<0.01,"Continue preserves an arrived contact's position and handoff readiness")
+	for officer in scene.population.police:
+		officer.node.position=Vector3(140,0.3,110)
+	var prior_relationship:float=game.contacts[0].relationship
 	scene.interact()
 	_check(meeting.status=="completed","Scheduled client handoff works in world")
+	_check(float(game.contacts[0].relationship)>=prior_relationship+7.0,"Early arrival earns the full fair punctual relationship reward")
 	_check(game.total_sales==2,"Tutorial and client sales counted once")
+	scene.population.set_physics_process(true)
+	scene.player.set_physics_process(true)
 	scene.player.position=scene.world.get_landmark("market")
 	scene._update_location()
 	scene.interact()

@@ -224,6 +224,8 @@ func _capture_world_state() -> void:
 	var data:Dictionary={"position":[pos.x,pos.y,pos.z],"interior":world.current_interior,"driving":player.vehicle!=null,"stolen_vehicle":population.stolen_vehicle,"pursuit":population.pursuit,"skateboarding":player.skateboarding,"car_rotation":player.visual.rotation.y}
 	if population.has_method("capture_pursuit_state"):
 		data.pursuit_state=population.capture_pursuit_state()
+	if population.has_method("capture_meeting_state"):
+		data.meeting_walks=population.capture_meeting_state()
 	for car in population.vehicles:
 		if bool(car.get("owned",false)):
 			var parked:Vector3=car.node.position
@@ -266,6 +268,8 @@ func _restore_world_state() -> void:
 		population.restore_pursuit_state(data.get("pursuit_state",{}))
 	camera.position=player.position+Vector3(24,38,28)
 	camera.look_at(player.position)
+	if population.has_method("restore_meeting_state"):
+		population.restore_meeting_state(data.get("meeting_walks",[]))
 	_update_location()
 
 func _update_location() -> void:
@@ -293,6 +297,8 @@ func interaction_text() -> String:
 		return "TAB  Save Milo in your contacts"
 	for meeting in Game.active_meetings():
 		if meeting.status=="scheduled" and closest_location==meeting.location_id:
+			if Game.minute>=float(meeting.due_minute)-Game.MEETING_ARRIVAL_MINUTES and population.meeting_walks.get(str(int(meeting.id)),{}).get("state","approaching")=="approaching":
+				return "%s is on the way  •  %s" % [meeting.contact_name,Game.format_minute(meeting.due_minute)]
 			return "E  Meet %s  •  %s" % [meeting.contact_name,Game.format_minute(meeting.due_minute)]
 	if closest_location!="":
 		var names:Dictionary={"classroom":"Attend class","market":"Shop at the market","cafe":"Order food","home":"Go home","auto_dealer":"Visit the vehicle dealer","library":"Enter the library","supplier":"Browse the underground market","skate_park":"Skate park • SPACE to ride","campus_quad":"Campus noticeboard","car_park":"Parking lot"}
@@ -320,12 +326,15 @@ func interact() -> void:
 		return
 	for meeting in Game.active_meetings():
 		if meeting.status=="scheduled" and closest_location==meeting.location_id:
-			if Game.minute<float(meeting.due_minute)-25:
+			if Game.minute<float(meeting.due_minute)-Game.MEETING_ARRIVAL_MINUTES:
 				Game.notification.emit("You're early. Wait here from your agenda.")
 				ui.show_page("agenda")
 				return
 			if population.has_method("meeting_actor_in_reach") and not population.meeting_actor_in_reach(int(meeting.id),4.0):
-				Game.notification.emit("Move closer to %s for the handoff."%meeting.contact_name)
+				if population.meeting_walks.get(str(int(meeting.id)),{}).get("state","approaching")=="approaching":
+					Game.notification.emit("%s is on the way. Watch for them walking in."%meeting.contact_name)
+				else:
+					Game.notification.emit("Move closer to %s for the handoff."%meeting.contact_name)
 				return
 			Game.complete_meeting(meeting.id)
 			return

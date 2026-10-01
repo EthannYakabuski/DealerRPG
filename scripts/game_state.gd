@@ -6,15 +6,20 @@ signal changed
 signal notification(text: String)
 signal ended(won: bool, reason: String)
 signal crime_committed(severity: float)
+signal feedback_event(kind: String, value: float)
 
 const Data = preload("res://scripts/game_data.gd")
 const TIME_SCALE: float = 3.0
 const MINUTES_PER_DAY: float = 1440.0
 const MEETING_WINDOW: float = 25.0
+const MEETING_ARRIVAL_MINUTES: float = 12.0
 const CLASS_START: float = 540.0
 const CLASS_DEADLINE: float = 600.0
 const CLASS_END: float = 660.0
 const VEHICLE_PRICE: float = 900.0
+const FIRST_FOLLOWUP_MINUTES: float = 90.0
+const REORDER_MINUTES: float = 360.0
+const REQUEST_RETRY_MINUTES: float = 240.0
 
 var cash: float = 22.0
 var tuition_remaining: float = Data.STARTING_TUITION
@@ -141,6 +146,8 @@ func current_objective() -> String:
 		0: return "Milo is waiting outside class. Open your backpack [I] and split your flower bundle."
 		1: return "Walk up to Milo and press [E] to make your first sale."
 		2: return "Open your phone [P] and save Milo as a contact."
+	if total_sales == 1 and inbox.is_empty():
+		return "Milo will text later. Explore campus or grab groceries while you wait."
 	return "Read your texts, choose your meetings, and pay off $%d in tuition." % int(ceil(tuition_remaining))
 
 func available_locations() -> Array[Dictionary]:
@@ -169,6 +176,7 @@ func split_flower() -> bool:
 	if tutorial_step == 0:
 		tutorial_step = 1
 	_notify("Packed six dime bags into your backpack.")
+	feedback_event.emit("pack", 0.0)
 	_mark_changed()
 	return true
 
@@ -182,6 +190,7 @@ func tutorial_sell() -> bool:
 	total_sales += 1
 	tutorial_step = 2
 	_notify("Milo: You're a lifesaver. Save my number and I'll text you later.")
+	feedback_event.emit("sale", 20.0)
 	_mark_changed()
 	return true
 
@@ -189,10 +198,12 @@ func add_tutorial_contact() -> bool:
 	if not _can_act(): return false
 	if tutorial_step != 2: return _fail("Make your first sale to Milo before saving his number.")
 	_add_contact("milo", "Milo", 55.0)
+	contacts[0]["sales"] = 1
+	contacts[0]["last_sale_minute"] = minute
+	contacts[0]["next_request_minute"] = minute + FIRST_FOLLOWUP_MINUTES
 	tutorial_step = 3
-	_next_message_minute = minute + 35.0
-	_create_request(contacts[0])
-	_notify("Milo saved. Your phone is your business: set a place, time, and price for each meet.")
+	_next_message_minute = minute + FIRST_FOLLOWUP_MINUTES
+	_notify("Milo saved. He'll text in about 90 minutes. Grab lunch or explore while he enjoys his purchase.")
 	_mark_changed()
 	save_game()
 	return true
@@ -236,7 +247,7 @@ func complete_meeting(meeting_id: int) -> bool:
 		if meeting["status"] != "scheduled": return _fail("That meeting is already finished.")
 		if player_location_id != str(meeting["location_id"]): return _fail("Head to %s for this meeting." % Data.location_name(str(meeting["location_id"])))
 		var lateness: float = minute - float(meeting["due_minute"])
-		if lateness < -MEETING_WINDOW: return _fail("You're early. They arrive at %s." % format_minute(float(meeting["due_minute"])))
+		if lateness < -MEETING_ARRIVAL_MINUTES: return _fail("You're early. They arrive around %s." % format_minute(float(meeting["due_minute"]) - MEETING_ARRIVAL_MINUTES))
 		if lateness > _meeting_grace(meeting): return _fail("You missed this meeting. Check your phone for another opportunity.")
 		if meeting["type"] == "supplier":
 			return _complete_supplier(meeting)
@@ -253,6 +264,8 @@ func complete_meeting(meeting_id: int) -> bool:
 		contact["relationship"] = clampf(float(contact["relationship"]) + relationship_change, 0.0, 100.0)
 		contact["sales"] = int(contact["sales"]) + 1
 		contact["last_sale_minute"] = minute
+		contact["last_order_quantity"] = quantity
+		contact["next_request_minute"] = minute + _reorder_delay(quantity)
 		inventory["dime_bag"] = int(inventory["dime_bag"]) - quantity
 		var earnings: float = quantity * price
 		cash += earnings
@@ -261,6 +274,7 @@ func complete_meeting(meeting_id: int) -> bool:
 		reputation += 1 if relationship_change >= 0.0 else 0
 		meeting["status"] = "completed"
 		_notify("Sold %d bags to %s for $%d. Relationship %s." % [quantity, contact["name"], int(earnings), "+%.0f" % relationship_change if relationship_change >= 0.0 else "%.0f" % relationship_change])
+		feedback_event.emit("sale", earnings)
 		report_crime(10.0 + quantity * 2.0)
 		_maybe_referral(contact)
 		_mark_changed()
@@ -273,7 +287,9 @@ func cancel_meeting(meeting_id: int) -> bool:
 		if int(meeting["id"]) == meeting_id and meeting["status"] == "scheduled":
 			meeting["status"] = "cancelled"
 			var contact: Dictionary = _find_contact(str(meeting["contact_id"]))
-			if not contact.is_empty(): contact["relationship"] = maxf(0.0, float(contact["relationship"]) - 3.0)
+			if not contact.is_empty():
+				contact["relationship"] = maxf(0.0, float(contact["relationship"]) - 3.0)
+				contact["next_request_minute"] = maxf(float(contact["next_request_minute"]), minute + REQUEST_RETRY_MINUTES)
 			_notify("Meeting cancelled. A little notice beats standing someone up.")
 			_mark_changed()
 			return true
@@ -312,6 +328,7 @@ func _complete_supplier(meeting: Dictionary) -> bool:
 	meeting["status"] = "completed"
 	var bust: bool = _rng.randf() < float(meeting.get("risk", 0.05))
 	_notify("Collected %d bundles from %s. Split them in your backpack." % [quantity, meeting["contact_name"]])
+	feedback_event.emit("purchase", -cost)
 	if bust:
 		_notify("Something is wrong. A lookout spotted police closing in — move!")
 		report_crime(65.0)
@@ -336,6 +353,7 @@ func buy_item(item: String, quantity: int = 1) -> bool:
 	cash -= price
 	inventory[item] = int(inventory.get(item, 0)) + quantity
 	_notify("Bought %s ×%d." % [Data.item_name(item), quantity])
+	feedback_event.emit("purchase", -price)
 	_mark_changed()
 	return true
 
@@ -352,6 +370,7 @@ func consume_item(item: String) -> bool:
 		hunger = minf(100.0, hunger + 8.0)
 	_low_food_warned = hunger < 20.0
 	_notify("%s used." % Data.item_name(item))
+	feedback_event.emit("consume", 0.0)
 	_mark_changed()
 	return true
 
@@ -383,6 +402,7 @@ func purchase_vehicle() -> bool:
 	cash -= VEHICLE_PRICE
 	vehicle_owned = true
 	_notify("Your own car. No stolen-vehicle alert when you drive it.")
+	feedback_event.emit("purchase", -VEHICLE_PRICE)
 	_mark_changed()
 	return true
 
@@ -395,6 +415,7 @@ func pay_tuition(amount: float = -1.0) -> bool:
 	cash -= amount
 	tuition_remaining = maxf(0.0, tuition_remaining - amount)
 	_notify("Paid $%d toward tuition. $%d left." % [int(amount), int(ceil(tuition_remaining))])
+	feedback_event.emit("tuition", -amount)
 	_mark_changed()
 	if tuition_remaining <= 0.001:
 		finish_game(true, "Tuition paid in full. You bought yourself a future.")
@@ -411,6 +432,7 @@ func attend_class() -> bool:
 	_class_resolved_through = today
 	classes_attended += 1
 	_notify("Class attended. A little normal life. You're free at 11:00.")
+	feedback_event.emit("class", 0.0)
 	advance_time(CLASS_END - time_of_day)
 	_mark_changed()
 	return true
@@ -467,9 +489,17 @@ func host_party() -> bool:
 	reputation += 3
 	for contact: Dictionary in contacts:
 		contact["relationship"] = minf(100.0, float(contact["relationship"]) + 5.0)
+		contact["last_sale_minute"] = minute + 90.0
+		contact["last_order_quantity"] = maxi(1, quantity / contacts.size())
+		contact["next_request_minute"] = minute + 90.0 + _reorder_delay(int(contact["last_order_quantity"]))
+	# Guests have already bought at the party. Their unaccepted requests are
+	# fulfilled by the event; deliberately scheduled appointments stay intact.
+	for message: Dictionary in inbox:
+		if message["status"] == "new": message["status"] = "expired"
 	advance_time(90.0)
 	if status != "playing": return false
 	_notify("Your party brought in $%d after supplies. People are talking — including the neighbours." % int(earnings - 25.0))
+	feedback_event.emit("party", earnings - 25.0)
 	report_crime(30.0 + quantity)
 	_maybe_referral(contacts[0])
 	_mark_changed()
@@ -521,6 +551,8 @@ func take_damage(amount: float) -> void:
 	if health <= 0.0: finish_game(false, "Your injuries ended the run. Every choice had a cost.")
 
 func caught_by_police() -> void:
+	if status != "playing": return
+	feedback_event.emit("caught", 0.0)
 	finish_game(false, "Caught by the police. Hardcore rules: this run is over.")
 
 func finish_game(won: bool, reason: String) -> void:
@@ -551,7 +583,9 @@ func _resolve_meetings() -> void:
 		if minute <= float(meeting["due_minute"]) + _meeting_grace(meeting): continue
 		meeting["status"] = "missed"
 		var contact: Dictionary = _find_contact(str(meeting["contact_id"]))
-		if not contact.is_empty(): contact["relationship"] = maxf(0.0, float(contact["relationship"]) - 12.0)
+		if not contact.is_empty():
+			contact["relationship"] = maxf(0.0, float(contact["relationship"]) - 12.0)
+			contact["next_request_minute"] = maxf(float(contact["next_request_minute"]), minute + REQUEST_RETRY_MINUTES)
 		_notify("You missed %s at %s. They've headed home." % [meeting["contact_name"], Data.location_name(str(meeting["location_id"]))])
 	for message: Dictionary in inbox:
 		if message["status"] == "new" and minute > float(message["expires_minute"]): message["status"] = "expired"
@@ -585,21 +619,33 @@ func _generate_messages() -> void:
 	if time_of_day < 7.0 * 60.0 or time_of_day > 23.0 * 60.0: return
 	var candidates: Array[Dictionary] = []
 	for contact: Dictionary in contacts:
-		var busy: bool = false
-		for message: Dictionary in inbox:
-			if message["contact_id"] == contact["id"] and message["status"] == "new": busy = true
-		for meeting: Dictionary in meetings:
-			if meeting["contact_id"] == contact["id"] and meeting["status"] == "scheduled": busy = true
-		if not busy: candidates.append(contact)
+		if _contact_can_request(contact): candidates.append(contact)
 	if not candidates.is_empty():
 		_create_request(candidates[_rng.randi_range(0, candidates.size() - 1)])
 
-func _create_request(contact: Dictionary) -> void:
+func _contact_can_request(contact: Dictionary) -> bool:
+	if minute < float(contact.get("next_request_minute", minute)): return false
+	for message: Dictionary in inbox:
+		if message["contact_id"] == contact["id"] and message["status"] == "new": return false
+	for meeting: Dictionary in meetings:
+		if meeting["contact_id"] == contact["id"] and meeting["status"] == "scheduled": return false
+	return true
+
+func _reorder_delay(quantity: int) -> float:
+	# Customers need time to use a purchase. Bigger orders last longer, while a
+	# little variation keeps the whole contact list from texting simultaneously.
+	return REORDER_MINUTES + _rng.randf_range(0.0, 120.0) + maxf(0.0, quantity - 1) * 30.0
+
+func _create_request(contact: Dictionary) -> bool:
+	if not _contact_can_request(contact): return false
 	var maximum: int = mini(6, 2 + reputation / 6)
 	var quantity: int = _rng.randi_range(1, maximum)
 	if reputation == 0: quantity = 2
 	inbox.append({"id": _new_id(), "contact_id": contact["id"], "contact_name": contact["name"], "quantity": quantity, "text": "Hey, can I grab %d bags? Pick a place and time that works for you." % quantity, "status": "new", "created_minute": minute, "expires_minute": minute + 210.0, "suggested_price": 24.0})
+	contact["next_request_minute"] = minute + REQUEST_RETRY_MINUTES
 	_notify("New text from %s." % contact["name"])
+	feedback_event.emit("text", 0.0)
+	return true
 
 func _maybe_referral(contact: Dictionary) -> void:
 	var target_count: int = mini(Data.CONTACT_NAMES.size(), 1 + reputation / 2)
@@ -611,7 +657,7 @@ func _maybe_referral(contact: Dictionary) -> void:
 	_create_request(contacts.back())
 
 func _add_contact(contact_id: String, contact_name: String, relationship: float) -> void:
-	contacts.append({"id": contact_id, "name": contact_name, "relationship": relationship, "sales": 0, "last_sale_minute": -1.0})
+	contacts.append({"id": contact_id, "name": contact_name, "relationship": relationship, "sales": 0, "last_sale_minute": -1.0, "last_order_quantity": 1, "next_request_minute": minute})
 
 func _find_contact(contact_id: String) -> Dictionary:
 	for contact: Dictionary in contacts:
@@ -702,12 +748,38 @@ func load_game(show_message: bool = true) -> bool:
 	_next_message_minute = float(state["next_message_minute"])
 	player_location_id = str(state.get("player_location_id", "campus_quad"))
 	world_state = _sanitize_world_state(state.get("world_state", {}))
+	_migrate_contact_timing()
 	paused = false
 	_low_food_warned = hunger < 20.0
 	_dirty = false
 	if show_message: _notify("Progress restored. Day %d, %s." % [day_number(), time_text()])
 	changed.emit()
 	return true
+
+func _migrate_contact_timing() -> void:
+	# Save v2 remains compatible: new saves persist the deadline, and older
+	# saves derive one once from their last successful handoff without rerolling.
+	for contact: Dictionary in contacts:
+		if contact.has("next_request_minute"): continue
+		var last_sale: float = float(contact["last_sale_minute"])
+		var quantity: int = 1
+		for meeting: Dictionary in meetings:
+			if meeting["contact_id"] == contact["id"] and meeting["status"] == "completed" and meeting["type"] == "client":
+				quantity = int(meeting["quantity"])
+		contact["last_order_quantity"] = quantity
+		var retry_at: float = 0.0
+		if last_sale >= 0.0:
+			retry_at = last_sale + REORDER_MINUTES + maxf(0.0, quantity - 1) * 30.0
+		elif contact["id"] == "milo" and tutorial_step >= 3:
+			contact["last_sale_minute"] = 600.0
+			retry_at = 600.0 + FIRST_FOLLOWUP_MINUTES
+		for message: Dictionary in inbox:
+			if message["contact_id"] != contact["id"]: continue
+			if message["status"] == "new" and float(message["created_minute"]) < retry_at:
+				message["status"] = "expired"
+			else:
+				retry_at = maxf(retry_at, float(message["created_minute"]) + REQUEST_RETRY_MINUTES)
+		contact["next_request_minute"] = retry_at
 
 func _validate_save(state: Dictionary) -> bool:
 	if int(state.get("version", -1)) != Data.SAVE_VERSION: return false
@@ -731,6 +803,9 @@ func _validate_save(state: Dictionary) -> bool:
 	for contact: Dictionary in state["contacts"]:
 		if not _has_keys(contact, ["id", "name", "relationship", "sales", "last_sale_minute"]): return false
 		if not _numeric_range(contact["relationship"], 0.0, 100.0): return false
+		if not _numeric_range(contact["sales"], 0.0, 10000000.0) or not _numeric_range(contact["last_sale_minute"], -1.0, 144000000.0): return false
+		if contact.has("next_request_minute") and not _numeric_range(contact["next_request_minute"], 0.0, 144000000.0): return false
+		if contact.has("last_order_quantity") and not _numeric_range(contact["last_order_quantity"], 1.0, 99.0): return false
 	for message: Dictionary in state["inbox"]:
 		if not _has_keys(message, ["id", "contact_id", "contact_name", "quantity", "text", "status", "created_minute", "expires_minute", "suggested_price"]): return false
 		if not _numeric_range(message["quantity"], 1.0, 99.0) or not _numeric_range(message["expires_minute"], 0.0, 144000000.0): return false
@@ -769,6 +844,25 @@ func _sanitize_world_state(value: Variant) -> Dictionary:
 		result["vehicle_owned_pos"] = value["vehicle_owned_pos"].duplicate()
 	if _numeric_range(value.get("car_rotation",0.0),-10000.0,10000.0): result["car_rotation"] = float(value.get("car_rotation",0.0))
 	result["pursuit_state"] = _sanitize_pursuit_state(value.get("pursuit_state",{}))
+	result["meeting_walks"] = _sanitize_meeting_walks(value.get("meeting_walks",[]))
+	return result
+
+func _sanitize_meeting_walks(value: Variant) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if not value is Array or value.size() > 10: return result
+	var seen_ids: Dictionary = {}
+	for entry: Variant in value:
+		if not entry is Dictionary: continue
+		if not _numeric_range(entry.get("id"),1.0,100000000.0) or fmod(float(entry["id"]),1.0) != 0.0: continue
+		var meeting_id: int = int(entry["id"])
+		if seen_ids.has(meeting_id): continue
+		if not _valid_saved_position(entry.get("position",[]),"") or not _valid_saved_position(entry.get("target",[]),""): continue
+		if not entry.get("state") is String or entry["state"] not in ["approaching","waiting","departing"]: continue
+		if not _numeric_range(entry.get("due"),0.0,144000000.0): continue
+		# Very long routes can begin before the day-one clock origin.
+		if not _numeric_range(entry.get("start_minute"),-1440.0,float(entry["due"])): continue
+		seen_ids[meeting_id] = true
+		result.append({"id":meeting_id,"position":entry["position"].duplicate(),"state":str(entry["state"]),"start_minute":float(entry["start_minute"]),"due":float(entry["due"]),"target":entry["target"].duplicate()})
 	return result
 
 func _sanitize_pursuit_state(value: Variant) -> Dictionary:

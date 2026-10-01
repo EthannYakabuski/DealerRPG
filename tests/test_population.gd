@@ -36,9 +36,11 @@ func _run() -> void:
 	await _test_world_population()
 	await _test_police()
 	await _test_player()
+	await _test_surface_traversal()
 	await _test_vehicles()
 	await _test_meetings()
 	await _test_dynamic_simulation()
+	await _test_traffic_endurance()
 	_test_world_state_save()
 	scene.queue_free()
 	await process_frame
@@ -63,7 +65,7 @@ func _test_world_population() -> void:
 	_check(population.vehicles.size()==12+world.parked_car_spawns.size(),"all world parking stall positions are populated")
 	var group: Dictionary = population.citizens[0]
 	_check(group.group==population.citizens[1].group and group.route==population.citizens[1].route,"friends share routes and purpose")
-	_check(group.node.position.distance_to(population.citizens[1].node.position)>0.5,"group members keep physical spacing")
+	_check(group.node.position.distance_to(population.citizens[1].node.position)>1.4,"group members start with natural shoulder spacing")
 	var clear_tutorial := true
 	for actor: Dictionary in population.citizens+population.police:
 		if actor.node.position.distance_to(Vector3(20,0.2,50))<5.0 or actor.node.position.distance_to(population.friend.position)<5.0: clear_tutorial = false
@@ -89,7 +91,7 @@ func _test_world_population() -> void:
 	for pedestrian: Dictionary in population.citizens:
 		var pedestrian_route: PackedVector3Array = pedestrian.route
 		for index in pedestrian_route.size():
-			var goal: Vector3 = pedestrian_route[index]+Vector3(pedestrian.offset)
+			var goal: Vector3 = population._safe_pedestrian_target(pedestrian_route[index]+Vector3(pedestrian.offset))
 			for obstacle: Rect2 in world.obstacle_rects:
 				if obstacle.grow(-0.25).has_point(Vector2(goal.x,goal.z)): all_targets_reachable = false
 	_check(all_targets_reachable,"every group offset destination stays outside a building footprint")
@@ -156,6 +158,18 @@ func _test_police() -> void:
 	for officer: Dictionary in population.police: officer.node.position = Vector3(135,0.2,110)
 	population._update_police(0.05,false)
 	_check(not population.pursuit,"ten seconds out of sight escapes a pursuit")
+	player.position = Vector3(-60,0.2,-17)
+	var cruiser: Dictionary = {}
+	for car: Dictionary in population.vehicles:
+		if bool(car.get("police",false)): cruiser = car
+	var cruiser_start: Vector3 = cruiser.node.position
+	cruiser.node.position = player.position+Vector3(8,0,0)
+	await physics_frame
+	game.report_crime(14.0)
+	_check(population.pursuit and float(population.police[4].alert)>0.0,"roaming cruiser witnesses a city crime and calls officers")
+	population._update_police(2.5,false)
+	_check(game.status=="playing" and population.arrest_seconds==0.0,"cruiser sighting cannot arrest the player without a nearby officer")
+	cruiser.node.position = cruiser_start
 	population.citizens[0].hp = 0.0
 	population.pursuit = true
 	population.reset_population()
@@ -220,6 +234,54 @@ func _test_player() -> void:
 	_check(population.citizens[0].hp==68.0 and population.citizens[0].stun>0.0,"kick damages an NPC and lets hit animation play")
 	await create_timer(0.15).timeout
 
+func _test_surface_traversal() -> void:
+	game.restart_game()
+	game.set_process(false)
+	player.reset_travel()
+	_check(is_equal_approx(world.walkable_surface_height(Vector3(32,0,61)),0.23),"raised campus island supports feet at its actual rendered top")
+	_check(is_equal_approx(world.walkable_surface_height(Vector3(22,0,61)),0.115),"campus paving height matches its visible slab")
+	_check(is_zero_approx(world.walkable_surface_height(Vector3(43,0,63))),"bare grass keeps zero support height instead of a global floating offset")
+	_check(world.walkable_surface_height(Vector3(71,0,18))>=0.095,"road ribbons provide their rendered asphalt height")
+	_check(is_equal_approx(world.walkable_surface_height(Vector3(81,0,66)),0.055),"parking pavement provides its rendered height")
+	player.position = Vector3(32,0.0,63)
+	player.skateboarding = true
+	player.board.rotation.y = 0.0
+	player._update_grounding()
+	var curb_board: AABB = ActorVisuals.bounds_of(player.board)
+	_check(curb_board.position.y>0.24,"front wheels clear an island edge while the deck centre is still over lower paving")
+	player.position = Vector3(25,0.3,61)
+	player.velocity = Vector3.ZERO
+	player.skateboarding = true
+	player.facing = Vector3.RIGHT
+	Input.action_press("move_right")
+	var supported := true
+	var deck_support_peak := 0.0
+	for tick in range(120):
+		player._physics_process(1.0/60.0)
+		var board_bounds: AABB = ActorVisuals.bounds_of(player.board)
+		var wheels: float = player.position.y+board_bounds.position.y
+		var beneath: float = world.walkable_surface_height(player.position)
+		deck_support_peak = maxf(deck_support_peak,wheels)
+		if wheels<beneath-0.001: supported = false
+		if tick%20==0: await physics_frame
+	Input.action_release("move_right")
+	_check(player.position.x>43.0,"skateboard crosses slab and island edges without getting blocked by new curbs")
+	_check(supported and deck_support_peak>0.24,"actual skateboard mesh remains above paving throughout traversal")
+	for tick in 45: player._physics_process(1.0/60.0)
+	var final_board: AABB = ActorVisuals.bounds_of(player.board)
+	_check(absf(player.position.y+final_board.position.y-0.015)<0.005,"wheels settle back onto bare grass after leaving raised paving")
+	player.skateboarding = false
+	player._physics_process(1.0/60.0)
+	_check(absf(player.visual.global_position.y)<0.005,"walking shoes return to grass height after dismount")
+	var citizen: CharacterBody3D = population.citizens[0].node
+	var old_position: Vector3 = citizen.position
+	citizen.position = Vector3(32,0.15,61)
+	population._ground_person(citizen)
+	var model: Node3D = citizen.get_meta("model")
+	_check(absf(model.global_position.y-0.23)<0.005,"pedestrian shoes share the same raised surface support")
+	citizen.position = old_position
+	population._ground_person(citizen)
+
 func _test_vehicles() -> void:
 	_reset_crime()
 	player.reset_travel()
@@ -256,19 +318,52 @@ func _test_meetings() -> void:
 	game.split_flower()
 	game.tutorial_sell()
 	game.add_tutorial_contact()
+	game.advance_time(90.0)
+	player.position = world.landmarks["cafe"].position
 	game.schedule_meeting(int(game.inbox[0].id),"cafe",90.0,24.0)
-	_check(population.meeting_actors.is_empty(),"meeting contacts do not arrive hours early")
-	game.advance_time(65.0)
-	_check(population.meeting_actors.size()==1,"contact arrives at start of handoff window")
 	var meeting: Dictionary = game.active_meetings()[0]
-	var actor: Node3D = population.meeting_actors[str(meeting.id)]
+	var id := str(meeting.id)
+	_check(population.meeting_actors.size()==1,"near-term contact begins a physical approach")
+	var actor: Node3D = population.meeting_actors[id]
+	var initial: Vector3 = actor.position
+	_check(population._point_offscreen(actor.position),"meeting contact is generated outside the camera view")
+	_check(not population.meeting_actor_in_reach(int(meeting.id)),"approaching contact cannot accept an early handoff")
+	var max_step := 0.0
+	var previous: Vector3 = actor.position
+	var arrived := -1.0
+	for tick in range(1800):
+		game.minute += 0.05
+		population._update_meeting_walks(1.0/60.0,false)
+		max_step = maxf(max_step,actor.position.distance_to(previous))
+		previous = actor.position
+		if tick%60==0: population._sync_meetings()
+		if tick%120==0: await physics_frame
+		if population.meeting_walks[id].state=="waiting":
+			arrived = game.minute
+			break
+	_check(arrived>=float(meeting.due_minute)-12.05 and arrived<=float(meeting.due_minute)-9.0,"client arrives physically about twelve minutes before appointment")
+	_check(initial.distance_to(actor.position)>20.0 and max_step<0.2,"client walks across the world with no visible position jump")
 	player.position = actor.position+Vector3(8,0,0)
 	_check(not population.meeting_actor_in_reach(int(meeting.id)),"physical handoff rejects an NPC eight metres away")
 	player.position = actor.position+Vector3(0.8,0,0)
 	await physics_frame
 	_check(population.meeting_actor_in_reach(int(meeting.id)),"arrived NPC in direct reach can accept a handoff")
+	var snapshot: Array = population.capture_meeting_state()
+	game.world_state = {"position":[player.position.x,player.position.y,player.position.z],"interior":"","meeting_walks":snapshot}
+	game.save_game()
+	actor.position = initial
+	population.meeting_walks[id].state = "approaching"
+	game.load_game(false)
+	population.restore_meeting_state(game.world_state.meeting_walks)
+	_check(population.meeting_walks[id].state=="waiting" and population.meeting_actor_in_reach(int(meeting.id)),"save/resume preserves the arrived client's actual position")
 	game.advance_time(65.0)
-	_check(population.meeting_actors.is_empty(),"missed-meeting contact leaves")
+	_check(population.meeting_walks[id].state=="departing","missed client departs on foot instead of disappearing in view")
+	var departure: Vector3 = actor.position
+	for tick in 120: population._update_meeting_walks(1.0/60.0,false)
+	_check(actor.position.distance_to(departure)>1.0,"departing contact visibly walks away")
+	player.position = Vector3(140,0.2,110)
+	population._update_meeting_walks(1.0/60.0,false)
+	_check(population.meeting_actors.is_empty(),"departing contact is removed only after leaving the view")
 	await process_frame
 
 func _test_world_state_save() -> void:
@@ -314,7 +409,42 @@ func _test_dynamic_simulation() -> void:
 		if actor.position.y < -0.5 or actor.position.y>1.0: grounded = false
 		for obstacle: Rect2 in world.obstacle_rects:
 			if obstacle.grow(-0.8).has_point(Vector2(actor.position.x,actor.position.z)): clear = false
+	var group_gap := INF
+	for index in population.citizens.size():
+		var citizen: Dictionary = population.citizens[index]
+		if not citizen.node.visible: continue
+		for next in range(index+1,population.citizens.size()):
+			var other: Dictionary = population.citizens[next]
+			if other.node.visible and citizen.group==other.group:
+				group_gap = minf(group_gap,population._horizontal_distance(citizen.node.position,other.node.position))
+	_check(group_gap>1.15,"walking friends retain visible body spacing after twenty seconds")
+	print("SMALLEST FRIEND SPACING: ",group_gap)
 	_check(moving>=12,"visible pedestrians make meaningful progress during twenty-second simulation")
 	_check(grounded,"pedestrians stay on the ground during sustained simulation")
 	_check(clear,"pedestrians stay outside building interiors during sustained simulation")
 	_check(population.vehicles[0].node.position.distance_to(car_start)>5.0,"traffic progresses during sustained simulation")
+
+func _test_traffic_endurance() -> void:
+	player.position = Vector3(600,0.2,0)
+	var movers: Array[Dictionary] = []
+	for car: Dictionary in population.vehicles:
+		if not car.parked and not car.occupied: movers.append(car)
+	var travelled: Array[float] = []
+	for car: Dictionary in movers: travelled.append(float(car.get("distance_travelled",0.0)))
+	var spacing_ok := true
+	for tick in range(18000):
+		population._update_traffic(1.0/60.0,true)
+		if tick%120==0:
+			for index in movers.size():
+				for next in range(index+1,movers.size()):
+					var a: Node3D = movers[index].node
+					var b: Node3D = movers[next].node
+					var relative := b.position-a.position
+					if a.basis.z.dot(b.basis.z)>0.9 and absf(relative.cross(a.basis.z).y)<1.8 and relative.length()<4.3: spacing_ok = false
+	var cruiser_moves := false
+	for index in movers.size():
+		var distance: float = float(movers[index].get("distance_travelled",0.0))-travelled[index]
+		_check(distance>500.0 and float(movers[index].stuck)<15.0,"traffic car %d progresses through five minutes without gridlock"%index)
+		if bool(movers[index].get("police",false)) and distance>500.0: cruiser_moves = true
+	_check(spacing_ok,"following traffic keeps separate car bodies in the same lane")
+	_check(cruiser_moves,"marked police cruiser participates in moving road traffic")
