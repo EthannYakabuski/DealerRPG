@@ -738,6 +738,6 @@ func show_ending(won:bool,reason:String) -> void:
 	box.add_child(_label("A FUTURE OF YOUR OWN" if won else "THE STORY ENDS HERE",14,LIME if won else RED))
 	box.add_child(_label("TUITION PAID." if won else "GAME OVER.",48,CREAM))
 	_paragraph(reason,box,CREAM)
-	_paragraph("%d days  ·  %d sales  ·  %d contacts\n$%s earned  ·  %d classes attended"%[Game.day_number(),Game.total_sales,Game.contacts.size(),_money(Game.total_earned),Game.classes_attended],box)
+	_paragraph("Day %d  ·  Sales: %d  ·  Contacts: %d\nEarned: $%s  ·  Classes attended: %d"%[Game.day_number(),Game.total_sales,Game.contacts.size(),_money(Game.total_earned),Game.classes_attended],box)
 	_space(box,20)
 	_button("START A NEW STORY",func():Game.restart_game();get_tree().reload_current_scene(),box,true)

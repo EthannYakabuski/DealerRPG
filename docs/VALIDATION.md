@@ -44,4 +44,8 @@ Browser screenshots and console reports are generated under ignored `build/scree
 
 The repository is configured for GitHub Pages through Actions. A dedicated Windows x64 runner builds the game; the deployment job uses GitHub's Pages artifact workflow. The runner is a background process, not an installed Windows service, so it must be started again after shutdown. Existing runner registration for another project was preserved.
 
-The first actual push/deployment must still be verified before the release is called published. Future pushes to `main` repeat import, all behavioral checks and web export before deployment.
+The [first release workflow](https://github.com/EthannYakabuski/DealerRPG/actions/runs/36884531478) completed successfully for commit `402c05ac9705ec22b5ff8b65d3765407f446623d` on October 1, 2026. Its fresh Windows checkout passed all 264 counted checks plus world geometry/cutaway verification, exported the game and uploaded the Pages artifact. GitHub's deployment job then published [Night School](https://ethannyakabuski.github.io/DealerRPG/), which returned HTTP 200.
+
+A fresh isolated Chrome profile played the public URL, downloading its real WebAssembly and game pack. Observed public interactions included new story, packing stock, the $20 tutorial sale, saving Milo, scheduling a meeting, waiting through the agenda, and a completed $44 handoff (cash $86; two total sales). A patrol witnessed the handoff. Manual save and full browser reload restored the cash, clock, position and active pursuit; the nearby patrol then completed the arrest, and Escape did not bypass the terminal game-over screen. All recorded public actions and reloads produced zero console errors, exceptions or failed network requests. Reports and screenshots use the ignored `published-*` filenames under `build/`.
+
+Future pushes to `main` repeat import, all behavioral checks and web export before deployment.

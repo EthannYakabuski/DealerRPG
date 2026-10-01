@@ -40,7 +40,7 @@ Repository prerequisites:
 
 Do not enable pull-request triggers for arbitrary contributors on a personal self-hosted runner. This workflow intentionally runs only trusted pushes to `main` or explicit manual dispatches. Checkout cleanup is disabled to avoid deleting local source asset packs; export exclusions and the generated-output cleanup keep those packs out of the published game.
 
-Once configured, the expected project URL is **https://EthannYakabuski.github.io/DealerRPG/**. The deployment run reports the actual URL. That address is a target, not evidence of a successful deployment.
+The game is published at [Night School on GitHub Pages](https://ethannyakabuski.github.io/DealerRPG/). The [first verified deployment](https://github.com/EthannYakabuski/DealerRPG/actions/runs/36884531478) built commit `402c05a`, passed all tests, and published successfully on October 1, 2026. A separate Chrome session then loaded and played the actual public WebAssembly build; see [release verification](VALIDATION.md).
 
 ### Register a separate runner
 

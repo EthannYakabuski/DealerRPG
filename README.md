@@ -8,7 +8,7 @@ The game begins after class. Your friend Milo wants a favour, your backpack hold
 
 ## Play
 
-The requested deployment address is [Night School on GitHub Pages](https://ethannyakabuski.github.io/DealerRPG/). A successful `main` build publishes the game there.
+[Play Night School on GitHub Pages](https://ethannyakabuski.github.io/DealerRPG/). Pushes to `main` test, build and publish updates automatically.
 
 Use a desktop browser with WebGL 2 and WebAssembly support. The game uses a single-threaded export, so it does not require cross-origin isolation headers. Saves stay in the browser/device you used; clearing site storage clears that save.
 
