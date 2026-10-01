@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#171c1b">
+  <meta name="description" content="NIGHT SCHOOL — Tuition is due. The city is open. A playable 3D neighborhood adventure.">
+  <title>$GODOT_PROJECT_NAME</title>
+  <style>
+    :root { color-scheme: dark; font-family: Arial, Helvetica, sans-serif; background: #171c1b; color: #f1eee4; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    #canvas { display: block; margin: 0; border: 0; outline: none; touch-action: none; }
+    #loading { position: fixed; inset: 0; display: grid; align-items: center; padding: max(24px, 6vw); background: radial-gradient(ellipse at 84% 12%, #344439 0, transparent 52%), #171c1b; }
+    .panel { width: min(660px, 100%); margin: auto; }
+    .eyebrow { color: #cedb87; font-size: 11px; font-weight: bold; letter-spacing: .28em; margin-bottom: 36px; }
+    h1 { font-size: clamp(54px, 11vw, 104px); line-height: .82; letter-spacing: -.065em; margin: 0 0 30px; font-weight: 900; }
+    h1 span { color: #cedb87; }
+    .tagline { font-size: clamp(16px, 2vw, 21px); line-height: 1.6; color: #c6c8ba; margin: 0 0 50px; }
+    progress { display: block; appearance: none; height: 5px; width: 100%; border: 0; background: #40473d; accent-color: #cedb87; }
+    progress::-webkit-progress-bar { background: #40473d; }
+    progress::-webkit-progress-value { background: #cedb87; transition: width .15s; }
+    progress::-moz-progress-bar { background: #cedb87; }
+    .readout { display: flex; justify-content: space-between; gap: 20px; margin-top: 16px; color: #c6c8ba; font-size: 12px; letter-spacing: .04em; }
+    .controls { margin-top: 48px; padding-top: 18px; border-top: 1px solid #424a40; font-size: 12px; color: #919d8e; line-height: 1.8; }
+    #notice { white-space: pre-line; color: #f3c4ab; line-height: 1.6; font-size: 14px; }
+    #retry { color: #171c1b; background: #cedb87; border: 0; padding: 12px 20px; font: inherit; cursor: pointer; margin-top: 18px; }
+    [hidden] { display: none !important; }
+    noscript { position: fixed; inset: 0; padding: 32px; background: #171c1b; z-index: 2; }
+  </style>
+  $GODOT_HEAD_INCLUDE
+</head>
+<body>
+  <canvas id="canvas" tabindex="0" aria-label="NIGHT SCHOOL game">Your browser needs canvas support to play NIGHT SCHOOL.</canvas>
+  <section id="loading" aria-label="Loading game">
+    <div class="panel">
+      <div class="eyebrow">A NEIGHBORHOOD AFTER DARK</div>
+      <h1>NIGHT<br><span>SCHOOL</span></h1>
+      <p class="tagline">Tuition is due.<br>The city is open.</p>
+      <progress id="progress" aria-label="Loading NIGHT SCHOOL"></progress>
+      <div class="readout" role="status"><span id="message">Opening the neighborhood</span><span id="percentage">Please wait</span></div>
+      <p id="notice" role="alert" hidden></p>
+      <button id="retry" hidden>Try again</button>
+      <div class="controls">DESKTOP RECOMMENDED &nbsp; / &nbsp; KEYBOARD + MOUSE<br>Click inside the game to focus. Resize your window at any time.</div>
+    </div>
+  </section>
+  <noscript>Enable JavaScript to play NIGHT SCHOOL.</noscript>
+  <script src="$GODOT_URL"></script>
+  <script>
+    const GODOT_CONFIG = $GODOT_CONFIG;
+    const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
+    const canvas = document.getElementById('canvas');
+    const overlay = document.getElementById('loading');
+    const progress = document.getElementById('progress');
+    const message = document.getElementById('message');
+    const percentage = document.getElementById('percentage');
+    const notice = document.getElementById('notice');
+    const retry = document.getElementById('retry');
+    retry.addEventListener('click', () => window.location.reload());
+    canvas.addEventListener('pointerdown', () => canvas.focus());
+    canvas.addEventListener('contextmenu', event => event.preventDefault());
+    canvas.addEventListener('keydown', event => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault();
+    });
+    function fail(error) {
+      console.error(error);
+      progress.hidden = true;
+      percentage.textContent = '';
+      message.textContent = 'The neighborhood could not open';
+      notice.textContent = error instanceof Error ? error.message : String(error);
+      notice.hidden = false;
+      retry.hidden = false;
+    }
+    if (typeof Engine === 'undefined') {
+      fail('A game file could not download. Check your connection and try again.');
+    } else {
+      const missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
+      if (missing.length) {
+        fail('This browser is missing: ' + missing.join(', ') + '. Try a browser with WebGL 2 and WebAssembly enabled.');
+      } else {
+        const engine = new Engine(GODOT_CONFIG);
+        engine.startGame({
+          canvas,
+          canvasResizePolicy: 2,
+          onProgress(current, total) {
+            if (total > 0) {
+              progress.max = total;
+              progress.value = current;
+              const amount = Math.min(100, Math.round(current / total * 100));
+              percentage.textContent = amount + '%';
+              message.textContent = amount === 100 ? 'Preparing your first night' : 'Opening the neighborhood';
+            } else {
+              progress.removeAttribute('value');
+              percentage.textContent = 'Please wait';
+            }
+          },
+        }).then(() => { overlay.remove(); canvas.focus(); }).catch(fail);
+      }
+    }
+  </script>
+</body>
+</html>

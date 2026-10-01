@@ -1,0 +1,36 @@
+; NIGHT SCHOOL — browser-first Godot 4.5 Compatibility project.
+config_version=5
+
+[application]
+config/name="Night School"
+config/description="Tuition is due. The city is open. A top-down student-life crime sandbox."
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.5", "GL Compatibility")
+config/icon="res://art/icon.svg"
+
+[autoload]
+Game="*res://scripts/game_state.gd"
+
+[display]
+window/size/viewport_width=1440
+window/size/viewport_height=900
+window/size/window_width_override=1280
+window/size/window_height_override=800
+window/stretch/mode="canvas_items"
+window/size/resizable=true
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
+textures/default_filters/anisotropic_filtering_level=2
+lights_and_shadows/directional_shadow/size=2048
+environment/defaults/default_clear_color=Color(0.09, 0.13, 0.16, 1)
+anti_aliasing/quality/msaa_3d=1
+textures/vram_compression/import_etc2_astc=true
+
+[physics]
+common/physics_ticks_per_second=60
+
+[audio]
+driver/enable_input=false

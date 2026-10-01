@@ -1,0 +1,4493 @@
+{
+  "Characters/character-male-a": {
+    "source": "Assets/Characters/Models/GLB format/character-male-a.glb",
+    "bytes": 246916,
+    "min": [
+      -0.38358,
+      0.0,
+      -0.17236
+    ],
+    "max": [
+      0.38358,
+      0.67132,
+      0.16764
+    ],
+    "size": [
+      0.76717,
+      0.67132,
+      0.34
+    ],
+    "triangles": 723,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": true,
+    "path": "res://art/models/Characters/character-male-a.glb"
+  },
+  "Characters/character-male-b": {
+    "source": "Assets/Characters/Models/GLB format/character-male-b.glb",
+    "bytes": 247332,
+    "min": [
+      -0.38358,
+      0.0,
+      -0.16286
+    ],
+    "max": [
+      0.38358,
+      0.66132,
+      0.22661
+    ],
+    "size": [
+      0.76717,
+      0.66132,
+      0.38947
+    ],
+    "triangles": 690,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": true,
+    "path": "res://art/models/Characters/character-male-b.glb"
+  },
+  "Characters/character-male-c": {
+    "source": "Assets/Characters/Models/GLB format/character-male-c.glb",
+    "bytes": 263104,
+    "min": [
+      -0.38358,
+      0.0,
+      -0.18802
+    ],
+    "max": [
+      0.38358,
+      0.79279,
+      0.27264
+    ],
+    "size": [
+      0.76717,
+      0.79279,
+      0.46066
+    ],
+    "triangles": 793,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": true,
+    "path": "res://art/models/Characters/character-male-c.glb"
+  },
+  "Characters/character-male-d": {
+    "source": "Assets/Characters/Models/GLB format/character-male-d.glb",
+    "bytes": 245184,
+    "min": [
+      -0.38358,
+      0.0,
+      -0.17236
+    ],
+    "max": [
+      0.38358,
+      0.72176,
+      0.16764
+    ],
+    "size": [
+      0.76717,
+      0.72176,
+      0.34
+    ],
+    "triangles": 711,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": true,
+    "path": "res://art/models/Characters/character-male-d.glb"
+  },
+  "Characters/character-male-e": {
+    "source": "Assets/Characters/Models/GLB format/character-male-e.glb",
+    "bytes": 242704,
+    "min": [
+      -0.38358,
+      0.0,
+      -0.17236
+    ],
+    "max": [
+      0.38358,
+      0.67597,
+      0.16961
+    ],
+    "size": [
+      0.76717,
+      0.67597,
+      0.34197
+    ],
+    "triangles": 710,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": true,
+    "path": "res://art/models/Characters/character-male-e.glb"
+  },
+  "Characters/character-male-f": {
+    "source": "Assets/Characters/Models/GLB format/character-male-f.glb",
+    "bytes": 249388,
+    "min": [
+      -0.38358,
+      0.0,
+      -0.17236
+    ],
+    "max": [
+      0.38358,
+      0.67132,
+      0.16764
+    ],
+    "size": [
+      0.76717,
+      0.67132,
+      0.34
+    ],
+    "triangles": 701,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": true,
+    "path": "res://art/models/Characters/character-male-f.glb"
+  },
+  "Characters/character-female-a": {
+    "source": "Assets/Characters/Models/GLB format/character-female-a.glb",
+    "bytes": 273448,
+    "min": [
+      -0.54939,
+      0.0,
+      -0.29189
+    ],
+    "max": [
+      0.54939,
+      0.77553,
+      0.20764
+    ],
+    "size": [
+      1.09879,
+      0.77553,
+      0.49953
+    ],
+    "triangles": 876,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": true,
+    "path": "res://art/models/Characters/character-female-a.glb"
+  },
+  "Characters/character-female-b": {
+    "source": "Assets/Characters/Models/GLB format/character-female-b.glb",
+    "bytes": 252140,
+    "min": [
+      -0.38358,
+      0.0,
+      -0.21088
+    ],
+    "max": [
+      0.38358,
+      0.72335,
+      0.20764
+    ],
+    "size": [
+      0.76717,
+      0.72335,
+      0.41852
+    ],
+    "triangles": 742,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": true,
+    "path": "res://art/models/Characters/character-female-b.glb"
+  },
+  "Characters/character-female-c": {
+    "source": "Assets/Characters/Models/GLB format/character-female-c.glb",
+    "bytes": 252040,
+    "min": [
+      -0.38358,
+      0.0,
+      -0.29189
+    ],
+    "max": [
+      0.38358,
+      0.77553,
+      0.20764
+    ],
+    "size": [
+      0.76717,
+      0.77553,
+      0.49953
+    ],
+    "triangles": 732,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": true,
+    "path": "res://art/models/Characters/character-female-c.glb"
+  },
+  "Characters/character-female-d": {
+    "source": "Assets/Characters/Models/GLB format/character-female-d.glb",
+    "bytes": 258760,
+    "min": [
+      -0.38358,
+      0.0,
+      -0.29189
+    ],
+    "max": [
+      0.38358,
+      0.77553,
+      0.20764
+    ],
+    "size": [
+      0.76717,
+      0.77553,
+      0.49953
+    ],
+    "triangles": 797,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": true,
+    "path": "res://art/models/Characters/character-female-d.glb"
+  },
+  "Characters/character-female-e": {
+    "source": "Assets/Characters/Models/GLB format/character-female-e.glb",
+    "bytes": 248012,
+    "min": [
+      -0.38358,
+      0.0,
+      -0.31942
+    ],
+    "max": [
+      0.38358,
+      0.71648,
+      0.20764
+    ],
+    "size": [
+      0.76717,
+      0.71648,
+      0.52706
+    ],
+    "triangles": 756,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": true,
+    "path": "res://art/models/Characters/character-female-e.glb"
+  },
+  "Characters/character-female-f": {
+    "source": "Assets/Characters/Models/GLB format/character-female-f.glb",
+    "bytes": 259488,
+    "min": [
+      -0.38358,
+      0.0,
+      -0.23347
+    ],
+    "max": [
+      0.38358,
+      0.67133,
+      0.20764
+    ],
+    "size": [
+      0.76717,
+      0.67132,
+      0.44111
+    ],
+    "triangles": 788,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": true,
+    "path": "res://art/models/Characters/character-female-f.glb"
+  },
+  "Commercial_City/building-a": {
+    "source": "Assets/Commercial_City/Models/GLB format/building-a.glb",
+    "bytes": 108936,
+    "min": [
+      -0.44179,
+      0.0,
+      -0.47
+    ],
+    "max": [
+      0.44179,
+      1.293,
+      0.47
+    ],
+    "size": [
+      0.88359,
+      1.293,
+      0.94
+    ],
+    "triangles": 1252,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/building-a.glb"
+  },
+  "Commercial_City/building-b": {
+    "source": "Assets/Commercial_City/Models/GLB format/building-b.glb",
+    "bytes": 106408,
+    "min": [
+      -0.485,
+      0.0,
+      -0.47
+    ],
+    "max": [
+      0.485,
+      1.293,
+      0.47
+    ],
+    "size": [
+      0.97,
+      1.293,
+      0.94
+    ],
+    "triangles": 1276,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/building-b.glb"
+  },
+  "Commercial_City/building-c": {
+    "source": "Assets/Commercial_City/Models/GLB format/building-c.glb",
+    "bytes": 102788,
+    "min": [
+      -0.44179,
+      0.0,
+      -0.545
+    ],
+    "max": [
+      0.44179,
+      0.893,
+      0.545
+    ],
+    "size": [
+      0.88359,
+      0.893,
+      1.09
+    ],
+    "triangles": 1195,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/building-c.glb"
+  },
+  "Commercial_City/building-d": {
+    "source": "Assets/Commercial_City/Models/GLB format/building-d.glb",
+    "bytes": 95160,
+    "min": [
+      -0.42,
+      0.0,
+      -0.45
+    ],
+    "max": [
+      0.42,
+      1.293,
+      0.45
+    ],
+    "size": [
+      0.84,
+      1.293,
+      0.9
+    ],
+    "triangles": 1100,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/building-d.glb"
+  },
+  "Commercial_City/building-e": {
+    "source": "Assets/Commercial_City/Models/GLB format/building-e.glb",
+    "bytes": 128208,
+    "min": [
+      -0.82,
+      0.0,
+      -0.50395
+    ],
+    "max": [
+      0.82,
+      0.893,
+      0.50395
+    ],
+    "size": [
+      1.64,
+      0.893,
+      1.00789
+    ],
+    "triangles": 1509,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/building-e.glb"
+  },
+  "Commercial_City/building-f": {
+    "source": "Assets/Commercial_City/Models/GLB format/building-f.glb",
+    "bytes": 148952,
+    "min": [
+      -0.42,
+      0.0,
+      -0.515
+    ],
+    "max": [
+      0.42,
+      1.693,
+      0.515
+    ],
+    "size": [
+      0.84,
+      1.693,
+      1.03
+    ],
+    "triangles": 1794,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/building-f.glb"
+  },
+  "Commercial_City/building-g": {
+    "source": "Assets/Commercial_City/Models/GLB format/building-g.glb",
+    "bytes": 166356,
+    "min": [
+      -0.485,
+      0.0,
+      -0.461
+    ],
+    "max": [
+      0.485,
+      1.693,
+      0.461
+    ],
+    "size": [
+      0.97,
+      1.693,
+      0.922
+    ],
+    "triangles": 2006,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/building-g.glb"
+  },
+  "Commercial_City/building-h": {
+    "source": "Assets/Commercial_City/Models/GLB format/building-h.glb",
+    "bytes": 127384,
+    "min": [
+      -0.44179,
+      0.0,
+      -0.50395
+    ],
+    "max": [
+      0.44179,
+      1.293,
+      0.50395
+    ],
+    "size": [
+      0.88359,
+      1.293,
+      1.00789
+    ],
+    "triangles": 1512,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/building-h.glb"
+  },
+  "Commercial_City/building-i": {
+    "source": "Assets/Commercial_City/Models/GLB format/building-i.glb",
+    "bytes": 209728,
+    "min": [
+      -0.62,
+      0.0,
+      -0.651
+    ],
+    "max": [
+      0.62,
+      1.68,
+      0.651
+    ],
+    "size": [
+      1.24,
+      1.68,
+      1.302
+    ],
+    "triangles": 2544,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/building-i.glb"
+  },
+  "Commercial_City/building-j": {
+    "source": "Assets/Commercial_City/Models/GLB format/building-j.glb",
+    "bytes": 440652,
+    "min": [
+      -1.04179,
+      0.0,
+      -0.67
+    ],
+    "max": [
+      1.04179,
+      1.693,
+      0.67
+    ],
+    "size": [
+      2.08359,
+      1.693,
+      1.34
+    ],
+    "triangles": 5246,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/building-j.glb"
+  },
+  "Commercial_City/building-k": {
+    "source": "Assets/Commercial_City/Models/GLB format/building-k.glb",
+    "bytes": 246976,
+    "min": [
+      -1.04179,
+      0.0,
+      -0.471
+    ],
+    "max": [
+      1.04179,
+      1.47,
+      0.471
+    ],
+    "size": [
+      2.08359,
+      1.47,
+      0.942
+    ],
+    "triangles": 2960,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/building-k.glb"
+  },
+  "Commercial_City/building-l": {
+    "source": "Assets/Commercial_City/Models/GLB format/building-l.glb",
+    "bytes": 290516,
+    "min": [
+      -0.685,
+      0.0,
+      -0.701
+    ],
+    "max": [
+      0.685,
+      2.27,
+      0.701
+    ],
+    "size": [
+      1.37,
+      2.27,
+      1.402
+    ],
+    "triangles": 3512,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/building-l.glb"
+  },
+  "Commercial_City/building-n": {
+    "source": "Assets/Commercial_City/Models/GLB format/building-n.glb",
+    "bytes": 341232,
+    "min": [
+      -1.16,
+      0.0,
+      -0.91
+    ],
+    "max": [
+      1.16,
+      2.48,
+      0.91
+    ],
+    "size": [
+      2.32,
+      2.48,
+      1.82
+    ],
+    "triangles": 4350,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/building-n.glb"
+  },
+  "Commercial_City/detail-awning": {
+    "source": "Assets/Commercial_City/Models/GLB format/detail-awning.glb",
+    "bytes": 5528,
+    "min": [
+      -0.2,
+      -0.0,
+      0.1
+    ],
+    "max": [
+      0.2,
+      0.4,
+      0.24789
+    ],
+    "size": [
+      0.4,
+      0.4,
+      0.14789
+    ],
+    "triangles": 40,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/detail-awning.glb"
+  },
+  "Commercial_City/detail-parasol-a": {
+    "source": "Assets/Commercial_City/Models/GLB format/detail-parasol-a.glb",
+    "bytes": 10320,
+    "min": [
+      -0.17321,
+      0.0,
+      -0.2
+    ],
+    "max": [
+      0.17321,
+      0.45,
+      0.2
+    ],
+    "size": [
+      0.34641,
+      0.45,
+      0.4
+    ],
+    "triangles": 96,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Commercial_City/detail-parasol-a.glb"
+  },
+  "Suburban_City/building-type-a": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-a.glb",
+    "bytes": 98604,
+    "min": [
+      -0.65,
+      0.0,
+      -0.51407
+    ],
+    "max": [
+      0.65,
+      0.83354,
+      0.51407
+    ],
+    "size": [
+      1.3,
+      0.83354,
+      1.02814
+    ],
+    "triangles": 1174,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-a.glb"
+  },
+  "Suburban_City/building-type-b": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-b.glb",
+    "bytes": 146720,
+    "min": [
+      -0.914,
+      0.0,
+      -0.57
+    ],
+    "max": [
+      0.914,
+      1.1375,
+      0.57
+    ],
+    "size": [
+      1.828,
+      1.1375,
+      1.14
+    ],
+    "triangles": 1748,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-b.glb"
+  },
+  "Suburban_City/building-type-c": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-c.glb",
+    "bytes": 99592,
+    "min": [
+      -0.64319,
+      0.0,
+      -0.51407
+    ],
+    "max": [
+      0.64319,
+      1.03354,
+      0.51407
+    ],
+    "size": [
+      1.28638,
+      1.03354,
+      1.02814
+    ],
+    "triangles": 1196,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-c.glb"
+  },
+  "Suburban_City/building-type-d": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-d.glb",
+    "bytes": 147368,
+    "min": [
+      -0.87819,
+      0.0,
+      -0.514
+    ],
+    "max": [
+      0.87819,
+      1.2375,
+      0.514
+    ],
+    "size": [
+      1.75638,
+      1.2375,
+      1.028
+    ],
+    "triangles": 1757,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-d.glb"
+  },
+  "Suburban_City/building-type-e": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-e.glb",
+    "bytes": 145512,
+    "min": [
+      -0.65,
+      0.0,
+      -0.514
+    ],
+    "max": [
+      0.65,
+      1.1375,
+      0.514
+    ],
+    "size": [
+      1.3,
+      1.1375,
+      1.028
+    ],
+    "triangles": 1731,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-e.glb"
+  },
+  "Suburban_City/building-type-f": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-f.glb",
+    "bytes": 138536,
+    "min": [
+      -0.714,
+      0.0,
+      -0.70295
+    ],
+    "max": [
+      0.714,
+      1.1375,
+      0.70295
+    ],
+    "size": [
+      1.428,
+      1.1375,
+      1.40589
+    ],
+    "triangles": 1616,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-f.glb"
+  },
+  "Suburban_City/building-type-g": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-g.glb",
+    "bytes": 93596,
+    "min": [
+      -0.725,
+      0.0,
+      -0.589
+    ],
+    "max": [
+      0.725,
+      0.76821,
+      0.589
+    ],
+    "size": [
+      1.45,
+      0.76821,
+      1.178
+    ],
+    "triangles": 1067,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-g.glb"
+  },
+  "Suburban_City/building-type-h": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-h.glb",
+    "bytes": 65364,
+    "min": [
+      -0.65,
+      0.0,
+      -0.458
+    ],
+    "max": [
+      0.65,
+      0.7375,
+      0.458
+    ],
+    "size": [
+      1.3,
+      0.7375,
+      0.916
+    ],
+    "triangles": 770,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-h.glb"
+  },
+  "Suburban_City/building-type-i": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-i.glb",
+    "bytes": 69772,
+    "min": [
+      -0.64319,
+      0.0,
+      -0.514
+    ],
+    "max": [
+      0.64319,
+      0.7375,
+      0.514
+    ],
+    "size": [
+      1.28638,
+      0.7375,
+      1.028
+    ],
+    "triangles": 800,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-i.glb"
+  },
+  "Suburban_City/building-type-j": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-j.glb",
+    "bytes": 99512,
+    "min": [
+      -0.685,
+      0.0,
+      -0.458
+    ],
+    "max": [
+      0.685,
+      1.0375,
+      0.458
+    ],
+    "size": [
+      1.37,
+      1.0375,
+      0.916
+    ],
+    "triangles": 1210,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-j.glb"
+  },
+  "Suburban_City/building-type-k": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-k.glb",
+    "bytes": 89152,
+    "min": [
+      -0.46047,
+      0.0,
+      -0.51
+    ],
+    "max": [
+      0.46047,
+      1.1496,
+      0.51
+    ],
+    "size": [
+      0.92094,
+      1.1496,
+      1.02
+    ],
+    "triangles": 1024,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-k.glb"
+  },
+  "Suburban_City/building-type-l": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-l.glb",
+    "bytes": 109232,
+    "min": [
+      -0.51679,
+      0.0,
+      -0.51
+    ],
+    "max": [
+      0.51679,
+      1.04919,
+      0.51
+    ],
+    "size": [
+      1.03359,
+      1.04919,
+      1.02
+    ],
+    "triangles": 1310,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-l.glb"
+  },
+  "Suburban_City/building-type-m": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-m.glb",
+    "bytes": 96996,
+    "min": [
+      -0.714,
+      0.0,
+      -0.714
+    ],
+    "max": [
+      0.714,
+      0.7375,
+      0.714
+    ],
+    "size": [
+      1.428,
+      0.7375,
+      1.428
+    ],
+    "triangles": 1112,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-m.glb"
+  },
+  "Suburban_City/building-type-n": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-n.glb",
+    "bytes": 139464,
+    "min": [
+      -0.89214,
+      0.0,
+      -0.68895
+    ],
+    "max": [
+      0.89214,
+      1.1375,
+      0.68895
+    ],
+    "size": [
+      1.78427,
+      1.1375,
+      1.37789
+    ],
+    "triangles": 1612,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-n.glb"
+  },
+  "Suburban_City/building-type-o": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-o.glb",
+    "bytes": 114424,
+    "min": [
+      -0.635,
+      0.0,
+      -0.514
+    ],
+    "max": [
+      0.635,
+      1.1375,
+      0.514
+    ],
+    "size": [
+      1.27,
+      1.1375,
+      1.028
+    ],
+    "triangles": 1326,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-o.glb"
+  },
+  "Suburban_City/building-type-p": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-p.glb",
+    "bytes": 109260,
+    "min": [
+      -0.62,
+      0.0,
+      -0.495
+    ],
+    "max": [
+      0.62,
+      0.918,
+      0.495
+    ],
+    "size": [
+      1.24,
+      0.918,
+      0.99
+    ],
+    "triangles": 1282,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-p.glb"
+  },
+  "Suburban_City/building-type-q": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-q.glb",
+    "bytes": 98632,
+    "min": [
+      -0.62,
+      -0.0,
+      -0.422
+    ],
+    "max": [
+      0.62,
+      0.918,
+      0.46359
+    ],
+    "size": [
+      1.24,
+      0.918,
+      0.88559
+    ],
+    "triangles": 1140,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-q.glb"
+  },
+  "Suburban_City/building-type-r": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-r.glb",
+    "bytes": 88544,
+    "min": [
+      -0.514,
+      0.0,
+      -0.51
+    ],
+    "max": [
+      0.514,
+      1.14114,
+      0.51
+    ],
+    "size": [
+      1.028,
+      1.14114,
+      1.02
+    ],
+    "triangles": 1030,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-r.glb"
+  },
+  "Suburban_City/building-type-s": {
+    "source": "Assets/Suburban_City/Models/GLB format/building-type-s.glb",
+    "bytes": 103172,
+    "min": [
+      -0.70301,
+      0.0,
+      -0.54319
+    ],
+    "max": [
+      0.70301,
+      1.1375,
+      0.54319
+    ],
+    "size": [
+      1.40603,
+      1.1375,
+      1.08638
+    ],
+    "triangles": 1212,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/building-type-s.glb"
+  },
+  "Suburban_City/fence": {
+    "source": "Assets/Suburban_City/Models/GLB format/fence.glb",
+    "bytes": 9672,
+    "min": [
+      -0.2375,
+      0.0,
+      -0.0375
+    ],
+    "max": [
+      0.2375,
+      0.27,
+      0.0375
+    ],
+    "size": [
+      0.475,
+      0.27,
+      0.075
+    ],
+    "triangles": 88,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/fence.glb"
+  },
+  "Suburban_City/fence-low": {
+    "source": "Assets/Suburban_City/Models/GLB format/fence-low.glb",
+    "bytes": 18552,
+    "min": [
+      -0.6375,
+      0.0,
+      -0.4375
+    ],
+    "max": [
+      0.6375,
+      0.17,
+      0.4
+    ],
+    "size": [
+      1.275,
+      0.17,
+      0.8375
+    ],
+    "triangles": 180,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/fence-low.glb"
+  },
+  "Suburban_City/planter": {
+    "source": "Assets/Suburban_City/Models/GLB format/planter.glb",
+    "bytes": 20368,
+    "min": [
+      -0.2,
+      0.0,
+      -0.15057
+    ],
+    "max": [
+      0.2,
+      0.17711,
+      0.14943
+    ],
+    "size": [
+      0.4,
+      0.17711,
+      0.3
+    ],
+    "triangles": 204,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/planter.glb"
+  },
+  "Suburban_City/tree-large": {
+    "source": "Assets/Suburban_City/Models/GLB format/tree-large.glb",
+    "bytes": 5812,
+    "min": [
+      -0.10522,
+      0.0,
+      -0.1215
+    ],
+    "max": [
+      0.10522,
+      0.767,
+      0.1215
+    ],
+    "size": [
+      0.21044,
+      0.767,
+      0.243
+    ],
+    "triangles": 42,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/tree-large.glb"
+  },
+  "Suburban_City/tree-small": {
+    "source": "Assets/Suburban_City/Models/GLB format/tree-small.glb",
+    "bytes": 5812,
+    "min": [
+      -0.10522,
+      0.0,
+      -0.1215
+    ],
+    "max": [
+      0.10522,
+      0.567,
+      0.1215
+    ],
+    "size": [
+      0.21044,
+      0.567,
+      0.243
+    ],
+    "triangles": 42,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Suburban_City/tree-small.glb"
+  },
+  "Industrial_City/building-a": {
+    "source": "Assets/Industrial_City/Models/GLB format/building-a.glb",
+    "bytes": 177316,
+    "min": [
+      -1.04107,
+      0.0,
+      -0.621
+    ],
+    "max": [
+      1.04252,
+      1.47,
+      0.621
+    ],
+    "size": [
+      2.08359,
+      1.47,
+      1.242
+    ],
+    "triangles": 2046,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Industrial_City/building-a.glb"
+  },
+  "Industrial_City/building-b": {
+    "source": "Assets/Industrial_City/Models/GLB format/building-b.glb",
+    "bytes": 212040,
+    "min": [
+      -1.04107,
+      -0.0,
+      -0.639
+    ],
+    "max": [
+      1.04252,
+      1.47,
+      0.623
+    ],
+    "size": [
+      2.08359,
+      1.47,
+      1.262
+    ],
+    "triangles": 2422,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Industrial_City/building-b.glb"
+  },
+  "Industrial_City/building-c": {
+    "source": "Assets/Industrial_City/Models/GLB format/building-c.glb",
+    "bytes": 175844,
+    "min": [
+      -0.84179,
+      -0.0,
+      -0.911
+    ],
+    "max": [
+      1.03414,
+      1.25,
+      1.19702
+    ],
+    "size": [
+      1.87593,
+      1.25,
+      2.10802
+    ],
+    "triangles": 1928,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Industrial_City/building-c.glb"
+  },
+  "Industrial_City/building-d": {
+    "source": "Assets/Industrial_City/Models/GLB format/building-d.glb",
+    "bytes": 100768,
+    "min": [
+      -0.44179,
+      -0.0,
+      -0.8
+    ],
+    "max": [
+      0.44179,
+      1.41455,
+      0.62
+    ],
+    "size": [
+      0.88359,
+      1.41455,
+      1.42
+    ],
+    "triangles": 1158,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Industrial_City/building-d.glb"
+  },
+  "Industrial_City/building-g": {
+    "source": "Assets/Industrial_City/Models/GLB format/building-g.glb",
+    "bytes": 106940,
+    "min": [
+      -0.83907,
+      -0.0,
+      -0.64179
+    ],
+    "max": [
+      0.83907,
+      1.28,
+      0.64179
+    ],
+    "size": [
+      1.67814,
+      1.28,
+      1.28359
+    ],
+    "triangles": 1242,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Industrial_City/building-g.glb"
+  },
+  "Industrial_City/shipping-container-a": {
+    "source": "Assets/Industrial_City/Models/GLB format/shipping-container-a.glb",
+    "bytes": 36624,
+    "min": [
+      -0.1863,
+      0.0,
+      -0.4113
+    ],
+    "max": [
+      0.1863,
+      0.34808,
+      0.4113
+    ],
+    "size": [
+      0.3726,
+      0.34808,
+      0.8226
+    ],
+    "triangles": 402,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Industrial_City/shipping-container-a.glb"
+  },
+  "Industrial_City/solar-panel-flat": {
+    "source": "Assets/Industrial_City/Models/GLB format/solar-panel-flat.glb",
+    "bytes": 13964,
+    "min": [
+      -0.2091,
+      0.0,
+      -0.3567
+    ],
+    "max": [
+      0.2091,
+      0.0615,
+      0.3567
+    ],
+    "size": [
+      0.4182,
+      0.0615,
+      0.7134
+    ],
+    "triangles": 164,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Industrial_City/solar-panel-flat.glb"
+  },
+  "Industrial_City/solar-panel-landscape-group": {
+    "source": "Assets/Industrial_City/Models/GLB format/solar-panel-landscape-group.glb",
+    "bytes": 81860,
+    "min": [
+      -0.7567,
+      -0.0,
+      -0.44753
+    ],
+    "max": [
+      0.7567,
+      0.26236,
+      0.44752
+    ],
+    "size": [
+      1.5134,
+      0.26236,
+      0.89505
+    ],
+    "triangles": 976,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Industrial_City/solar-panel-landscape-group.glb"
+  },
+  "Cars/sedan": {
+    "source": "Assets/Cars/Models/GLB format/sedan.glb",
+    "bytes": 172216,
+    "min": [
+      -0.75,
+      -0.0,
+      -1.3
+    ],
+    "max": [
+      0.75,
+      1.3,
+      1.25
+    ],
+    "size": [
+      1.5,
+      1.3,
+      2.55
+    ],
+    "triangles": 2032,
+    "meshes": 5,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Cars/sedan.glb"
+  },
+  "Cars/sedan-sports": {
+    "source": "Assets/Cars/Models/GLB format/sedan-sports.glb",
+    "bytes": 177676,
+    "min": [
+      -0.65,
+      -0.0,
+      -1.3
+    ],
+    "max": [
+      0.65,
+      1.1,
+      1.25
+    ],
+    "size": [
+      1.3,
+      1.1,
+      2.55
+    ],
+    "triangles": 2088,
+    "meshes": 6,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Cars/sedan-sports.glb"
+  },
+  "Cars/suv": {
+    "source": "Assets/Cars/Models/GLB format/suv.glb",
+    "bytes": 207572,
+    "min": [
+      -0.75,
+      -0.0,
+      -1.35
+    ],
+    "max": [
+      0.75,
+      1.3,
+      1.35
+    ],
+    "size": [
+      1.5,
+      1.3,
+      2.7
+    ],
+    "triangles": 2474,
+    "meshes": 6,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Cars/suv.glb"
+  },
+  "Cars/hatchback-sports": {
+    "source": "Assets/Cars/Models/GLB format/hatchback-sports.glb",
+    "bytes": 197804,
+    "min": [
+      -0.65,
+      -0.0,
+      -1.45
+    ],
+    "max": [
+      0.65,
+      1.1,
+      1.4
+    ],
+    "size": [
+      1.3,
+      1.1,
+      2.85
+    ],
+    "triangles": 2088,
+    "meshes": 5,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Cars/hatchback-sports.glb"
+  },
+  "Cars/van": {
+    "source": "Assets/Cars/Models/GLB format/van.glb",
+    "bytes": 175664,
+    "min": [
+      -0.75,
+      -0.0,
+      -1.4
+    ],
+    "max": [
+      0.75,
+      1.35,
+      1.35
+    ],
+    "size": [
+      1.5,
+      1.35,
+      2.75
+    ],
+    "triangles": 2082,
+    "meshes": 5,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Cars/van.glb"
+  },
+  "Cars/delivery": {
+    "source": "Assets/Cars/Models/GLB format/delivery.glb",
+    "bytes": 240264,
+    "min": [
+      -0.75,
+      -0.0,
+      -1.65
+    ],
+    "max": [
+      0.75,
+      1.65,
+      1.6
+    ],
+    "size": [
+      1.5,
+      1.65,
+      3.25
+    ],
+    "triangles": 2476,
+    "meshes": 6,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Cars/delivery.glb"
+  },
+  "Cars/taxi": {
+    "source": "Assets/Cars/Models/GLB format/taxi.glb",
+    "bytes": 175608,
+    "min": [
+      -0.75,
+      -0.0,
+      -1.4
+    ],
+    "max": [
+      0.75,
+      1.5,
+      1.35
+    ],
+    "size": [
+      1.5,
+      1.5,
+      2.75
+    ],
+    "triangles": 2072,
+    "meshes": 5,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Cars/taxi.glb"
+  },
+  "Cars/police": {
+    "source": "Assets/Cars/Models/GLB format/police.glb",
+    "bytes": 195336,
+    "min": [
+      -0.75,
+      -0.0,
+      -1.55
+    ],
+    "max": [
+      0.75,
+      1.3,
+      1.55
+    ],
+    "size": [
+      1.5,
+      1.3,
+      3.1
+    ],
+    "triangles": 2304,
+    "meshes": 6,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Cars/police.glb"
+  },
+  "Cars/ambulance": {
+    "source": "Assets/Cars/Models/GLB format/ambulance.glb",
+    "bytes": 233612,
+    "min": [
+      -0.75,
+      -0.0,
+      -1.65
+    ],
+    "max": [
+      0.75,
+      1.8,
+      1.6
+    ],
+    "size": [
+      1.5,
+      1.8,
+      3.25
+    ],
+    "triangles": 2804,
+    "meshes": 7,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Cars/ambulance.glb"
+  },
+  "Roads/light-curved": {
+    "source": "Assets/Roads/Models/GLB format/light-curved.glb",
+    "bytes": 9492,
+    "min": [
+      -0.025,
+      0.0,
+      -0.2
+    ],
+    "max": [
+      0.025,
+      0.675,
+      0.025
+    ],
+    "size": [
+      0.05,
+      0.675,
+      0.225
+    ],
+    "triangles": 92,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Roads/light-curved.glb"
+  },
+  "Roads/light-square": {
+    "source": "Assets/Roads/Models/GLB format/light-square.glb",
+    "bytes": 6996,
+    "min": [
+      -0.025,
+      0.0,
+      -0.2125
+    ],
+    "max": [
+      0.025,
+      0.6,
+      0.025
+    ],
+    "size": [
+      0.05,
+      0.6,
+      0.2375
+    ],
+    "triangles": 60,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Roads/light-square.glb"
+  },
+  "Roads/road-sign-stop": {
+    "source": "Assets/Roads/Models/GLB format/road-sign-stop.glb",
+    "bytes": 10720,
+    "min": [
+      -0.0514,
+      0.0,
+      -0.06911
+    ],
+    "max": [
+      0.0261,
+      0.49407,
+      0.06911
+    ],
+    "size": [
+      0.0775,
+      0.49407,
+      0.13821
+    ],
+    "triangles": 104,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Roads/road-sign-stop.glb"
+  },
+  "Roads/road-sign-street": {
+    "source": "Assets/Roads/Models/GLB format/road-sign-street.glb",
+    "bytes": 15948,
+    "min": [
+      -0.17125,
+      0.0,
+      -0.025
+    ],
+    "max": [
+      0.025,
+      0.475,
+      0.17125
+    ],
+    "size": [
+      0.19625,
+      0.475,
+      0.19625
+    ],
+    "triangles": 154,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Roads/road-sign-street.glb"
+  },
+  "Roads/traffic-light": {
+    "source": "Assets/Roads/Models/GLB format/traffic-light.glb",
+    "bytes": 20344,
+    "min": [
+      -0.0726,
+      0.0,
+      -0.045
+    ],
+    "max": [
+      0.045,
+      0.515,
+      0.045
+    ],
+    "size": [
+      0.1176,
+      0.515,
+      0.09
+    ],
+    "triangles": 212,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Roads/traffic-light.glb"
+  },
+  "Roads/dumpster": {
+    "source": "Assets/Roads/Models/GLB format/dumpster.glb",
+    "bytes": 24456,
+    "min": [
+      -0.13,
+      0.0,
+      -0.185
+    ],
+    "max": [
+      0.145,
+      0.20944,
+      0.185
+    ],
+    "size": [
+      0.275,
+      0.20944,
+      0.37
+    ],
+    "triangles": 234,
+    "meshes": 3,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Roads/dumpster.glb"
+  },
+  "Roads/construction-cone": {
+    "source": "Assets/Roads/Models/GLB format/construction-cone.glb",
+    "bytes": 7056,
+    "min": [
+      -0.0375,
+      0.0,
+      -0.0375
+    ],
+    "max": [
+      0.0375,
+      0.09375,
+      0.0375
+    ],
+    "size": [
+      0.075,
+      0.09375,
+      0.075
+    ],
+    "triangles": 66,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Roads/construction-cone.glb"
+  },
+  "Roads/construction-barrier": {
+    "source": "Assets/Roads/Models/GLB format/construction-barrier.glb",
+    "bytes": 7052,
+    "min": [
+      -0.06775,
+      0.0,
+      -0.1125
+    ],
+    "max": [
+      0.06775,
+      0.13,
+      0.1125
+    ],
+    "size": [
+      0.1355,
+      0.13,
+      0.225
+    ],
+    "triangles": 60,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Roads/construction-barrier.glb"
+  },
+  "Roads/electricity-pole": {
+    "source": "Assets/Roads/Models/GLB format/electricity-pole.glb",
+    "bytes": 43652,
+    "min": [
+      -0.29736,
+      0.0,
+      -0.10711
+    ],
+    "max": [
+      0.28172,
+      0.525,
+      0.10711
+    ],
+    "size": [
+      0.57908,
+      0.525,
+      0.21422
+    ],
+    "triangles": 416,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Roads/electricity-pole.glb"
+  },
+  "Skateboard/skateboard": {
+    "source": "Assets/Skateboard/Models/GLB format/skateboard.glb",
+    "bytes": 21060,
+    "min": [
+      -0.15,
+      -0.0,
+      -0.35
+    ],
+    "max": [
+      0.15,
+      0.1366,
+      0.35
+    ],
+    "size": [
+      0.3,
+      0.1366,
+      0.7
+    ],
+    "triangles": 240,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Skateboard/skateboard.glb"
+  },
+  "Skateboard/rail-low": {
+    "source": "Assets/Skateboard/Models/GLB format/rail-low.glb",
+    "bytes": 9620,
+    "min": [
+      -0.075,
+      0.0,
+      -0.5
+    ],
+    "max": [
+      0.075,
+      0.25,
+      0.5
+    ],
+    "size": [
+      0.15,
+      0.25,
+      1.0
+    ],
+    "triangles": 90,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Skateboard/rail-low.glb"
+  },
+  "Skateboard/rail-high": {
+    "source": "Assets/Skateboard/Models/GLB format/rail-high.glb",
+    "bytes": 9640,
+    "min": [
+      -0.075,
+      -0.0,
+      -0.5
+    ],
+    "max": [
+      0.075,
+      0.45,
+      0.5
+    ],
+    "size": [
+      0.15,
+      0.45,
+      1.0
+    ],
+    "triangles": 90,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Skateboard/rail-high.glb"
+  },
+  "Skateboard/half-pipe": {
+    "source": "Assets/Skateboard/Models/GLB format/half-pipe.glb",
+    "bytes": 5268,
+    "min": [
+      -0.5,
+      0.0,
+      -0.5
+    ],
+    "max": [
+      0.5,
+      0.8,
+      0.5
+    ],
+    "size": [
+      1.0,
+      0.8,
+      1.0
+    ],
+    "triangles": 44,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Skateboard/half-pipe.glb"
+  },
+  "Skateboard/obstacle-box": {
+    "source": "Assets/Skateboard/Models/GLB format/obstacle-box.glb",
+    "bytes": 4524,
+    "min": [
+      -0.5,
+      -0.05,
+      -0.5
+    ],
+    "max": [
+      0.5,
+      0.15,
+      0.5
+    ],
+    "size": [
+      1.0,
+      0.2,
+      1.0
+    ],
+    "triangles": 28,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Skateboard/obstacle-box.glb"
+  },
+  "Skateboard/steps": {
+    "source": "Assets/Skateboard/Models/GLB format/steps.glb",
+    "bytes": 8248,
+    "min": [
+      -0.5,
+      0.0,
+      -0.5
+    ],
+    "max": [
+      0.5,
+      0.4,
+      0.5
+    ],
+    "size": [
+      1.0,
+      0.4,
+      1.0
+    ],
+    "triangles": 84,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Skateboard/steps.glb"
+  },
+  "Furniture/bedSingle": {
+    "source": "Assets/Furniture/Models/GLTF format/bedSingle.glb",
+    "bytes": 18636,
+    "min": [
+      0.385,
+      0.0,
+      -1.125
+    ],
+    "max": [
+      0.956,
+      0.375,
+      0.0
+    ],
+    "size": [
+      0.571,
+      0.375,
+      1.125
+    ],
+    "triangles": 214,
+    "meshes": 3,
+    "materials": 4,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/bedSingle.glb"
+  },
+  "Furniture/cabinetBed": {
+    "source": "Assets/Furniture/Models/GLTF format/cabinetBed.glb",
+    "bytes": 7496,
+    "min": [
+      -0.01,
+      0.0,
+      -0.205
+    ],
+    "max": [
+      0.256,
+      0.2332,
+      0.01
+    ],
+    "size": [
+      0.266,
+      0.2332,
+      0.215
+    ],
+    "triangles": 72,
+    "meshes": 2,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/cabinetBed.glb"
+  },
+  "Furniture/desk": {
+    "source": "Assets/Furniture/Models/GLTF format/desk.glb",
+    "bytes": 15048,
+    "min": [
+      -0.01,
+      0.0,
+      -0.38
+    ],
+    "max": [
+      0.72448,
+      0.38441,
+      0.0123
+    ],
+    "size": [
+      0.73448,
+      0.38441,
+      0.3923
+    ],
+    "triangles": 198,
+    "meshes": 2,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/desk.glb"
+  },
+  "Furniture/chairDesk": {
+    "source": "Assets/Furniture/Models/GLTF format/chairDesk.glb",
+    "bytes": 39016,
+    "min": [
+      0.0,
+      0.0,
+      -0.3143
+    ],
+    "max": [
+      0.33495,
+      0.6076,
+      0.0
+    ],
+    "size": [
+      0.33495,
+      0.6076,
+      0.3143
+    ],
+    "triangles": 588,
+    "meshes": 2,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/chairDesk.glb"
+  },
+  "Furniture/chair": {
+    "source": "Assets/Furniture/Models/GLTF format/chair.glb",
+    "bytes": 10756,
+    "min": [
+      0.0,
+      0.0,
+      -0.2
+    ],
+    "max": [
+      0.2,
+      0.47,
+      0
+    ],
+    "size": [
+      0.2,
+      0.47,
+      0.2
+    ],
+    "triangles": 170,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/chair.glb"
+  },
+  "Furniture/table": {
+    "source": "Assets/Furniture/Models/GLTF format/table.glb",
+    "bytes": 8196,
+    "min": [
+      0.0,
+      0.0,
+      -0.44737
+    ],
+    "max": [
+      0.84149,
+      0.32673,
+      0
+    ],
+    "size": [
+      0.84149,
+      0.32673,
+      0.44737
+    ],
+    "triangles": 120,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/table.glb"
+  },
+  "Furniture/tableRound": {
+    "source": "Assets/Furniture/Models/GLTF format/tableRound.glb",
+    "bytes": 6444,
+    "min": [
+      0.0,
+      -0.27,
+      -0.8
+    ],
+    "max": [
+      0.69282,
+      0.09673,
+      0.0
+    ],
+    "size": [
+      0.69282,
+      0.36673,
+      0.8
+    ],
+    "triangles": 80,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/tableRound.glb"
+  },
+  "Furniture/laptop": {
+    "source": "Assets/Furniture/Models/GLTF format/laptop.glb",
+    "bytes": 5540,
+    "min": [
+      0.0,
+      0.0,
+      -0.24007
+    ],
+    "max": [
+      0.264,
+      0.16181,
+      0.0
+    ],
+    "size": [
+      0.264,
+      0.16181,
+      0.24007
+    ],
+    "triangles": 68,
+    "meshes": 1,
+    "materials": 3,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/laptop.glb"
+  },
+  "Furniture/computerScreen": {
+    "source": "Assets/Furniture/Models/GLTF format/computerScreen.glb",
+    "bytes": 6404,
+    "min": [
+      -0.0,
+      -0.0,
+      -0.104
+    ],
+    "max": [
+      0.39269,
+      0.29429,
+      -0.0
+    ],
+    "size": [
+      0.39269,
+      0.29429,
+      0.104
+    ],
+    "triangles": 72,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/computerScreen.glb"
+  },
+  "Furniture/computerKeyboard": {
+    "source": "Assets/Furniture/Models/GLTF format/computerKeyboard.glb",
+    "bytes": 3476,
+    "min": [
+      0.0,
+      0.0,
+      -0.11819
+    ],
+    "max": [
+      0.2822,
+      0.02756,
+      -0.0
+    ],
+    "size": [
+      0.2822,
+      0.02756,
+      0.11819
+    ],
+    "triangles": 32,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/computerKeyboard.glb"
+  },
+  "Furniture/loungeSofa": {
+    "source": "Assets/Furniture/Models/GLTF format/loungeSofa.glb",
+    "bytes": 9644,
+    "min": [
+      0.0,
+      0.0,
+      -0.41
+    ],
+    "max": [
+      0.98,
+      0.46,
+      0
+    ],
+    "size": [
+      0.98,
+      0.46,
+      0.41
+    ],
+    "triangles": 128,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/loungeSofa.glb"
+  },
+  "Furniture/loungeChair": {
+    "source": "Assets/Furniture/Models/GLTF format/loungeChair.glb",
+    "bytes": 9648,
+    "min": [
+      0.0,
+      0.0,
+      -0.41
+    ],
+    "max": [
+      0.49,
+      0.46,
+      0
+    ],
+    "size": [
+      0.49,
+      0.46,
+      0.41
+    ],
+    "triangles": 128,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/loungeChair.glb"
+  },
+  "Furniture/tableCoffee": {
+    "source": "Assets/Furniture/Models/GLTF format/tableCoffee.glb",
+    "bytes": 8256,
+    "min": [
+      -0.461,
+      -0.0,
+      -0.3
+    ],
+    "max": [
+      0.2,
+      0.23,
+      0.1
+    ],
+    "size": [
+      0.661,
+      0.23,
+      0.4
+    ],
+    "triangles": 124,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/tableCoffee.glb"
+  },
+  "Furniture/kitchenFridge": {
+    "source": "Assets/Furniture/Models/GLTF format/kitchenFridge.glb",
+    "bytes": 20116,
+    "min": [
+      0.0,
+      0.0,
+      -0.28193
+    ],
+    "max": [
+      0.43,
+      0.92,
+      0.01
+    ],
+    "size": [
+      0.43,
+      0.92,
+      0.29193
+    ],
+    "triangles": 250,
+    "meshes": 3,
+    "materials": 4,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/kitchenFridge.glb"
+  },
+  "Furniture/kitchenStove": {
+    "source": "Assets/Furniture/Models/GLTF format/kitchenStove.glb",
+    "bytes": 54324,
+    "min": [
+      0.0,
+      0.0,
+      -0.45
+    ],
+    "max": [
+      0.43,
+      0.45,
+      0
+    ],
+    "size": [
+      0.43,
+      0.45,
+      0.45
+    ],
+    "triangles": 830,
+    "meshes": 2,
+    "materials": 5,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/kitchenStove.glb"
+  },
+  "Furniture/kitchenSink": {
+    "source": "Assets/Furniture/Models/GLTF format/kitchenSink.glb",
+    "bytes": 23480,
+    "min": [
+      0.0,
+      0.0,
+      -0.45
+    ],
+    "max": [
+      0.43,
+      0.49,
+      0
+    ],
+    "size": [
+      0.43,
+      0.49,
+      0.45
+    ],
+    "triangles": 318,
+    "meshes": 2,
+    "materials": 6,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/kitchenSink.glb"
+  },
+  "Furniture/kitchenCabinet": {
+    "source": "Assets/Furniture/Models/GLTF format/kitchenCabinet.glb",
+    "bytes": 10444,
+    "min": [
+      0.0,
+      0.0,
+      -0.45
+    ],
+    "max": [
+      0.43,
+      0.45,
+      0
+    ],
+    "size": [
+      0.43,
+      0.45,
+      0.45
+    ],
+    "triangles": 114,
+    "meshes": 2,
+    "materials": 3,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/kitchenCabinet.glb"
+  },
+  "Furniture/kitchenCoffeeMachine": {
+    "source": "Assets/Furniture/Models/GLTF format/kitchenCoffeeMachine.glb",
+    "bytes": 13332,
+    "min": [
+      0.0,
+      0.0,
+      -0.24017
+    ],
+    "max": [
+      0.18954,
+      0.17749,
+      0.0
+    ],
+    "size": [
+      0.18954,
+      0.17749,
+      0.24017
+    ],
+    "triangles": 166,
+    "meshes": 2,
+    "materials": 3,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/kitchenCoffeeMachine.glb"
+  },
+  "Furniture/kitchenMicrowave": {
+    "source": "Assets/Furniture/Models/GLTF format/kitchenMicrowave.glb",
+    "bytes": 11248,
+    "min": [
+      0.0,
+      0.0,
+      -0.22
+    ],
+    "max": [
+      0.29,
+      0.18,
+      0.01
+    ],
+    "size": [
+      0.29,
+      0.18,
+      0.23
+    ],
+    "triangles": 152,
+    "meshes": 2,
+    "materials": 4,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/kitchenMicrowave.glb"
+  },
+  "Furniture/bookcaseOpen": {
+    "source": "Assets/Furniture/Models/GLTF format/bookcaseOpen.glb",
+    "bytes": 18020,
+    "min": [
+      0.0,
+      0.0,
+      -0.25
+    ],
+    "max": [
+      0.4,
+      0.88,
+      0
+    ],
+    "size": [
+      0.4,
+      0.88,
+      0.25
+    ],
+    "triangles": 320,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/bookcaseOpen.glb"
+  },
+  "Furniture/books": {
+    "source": "Assets/Furniture/Models/GLTF format/books.glb",
+    "bytes": 6864,
+    "min": [
+      0.0,
+      0.0,
+      -0.0945
+    ],
+    "max": [
+      0.15045,
+      0.1039,
+      0
+    ],
+    "size": [
+      0.15045,
+      0.1039,
+      0.0945
+    ],
+    "triangles": 62,
+    "meshes": 1,
+    "materials": 4,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/books.glb"
+  },
+  "Furniture/pottedPlant": {
+    "source": "Assets/Furniture/Models/GLTF format/pottedPlant.glb",
+    "bytes": 7576,
+    "min": [
+      -0.10603,
+      0.0,
+      -0.12073
+    ],
+    "max": [
+      0.10603,
+      0.65402,
+      0.12073
+    ],
+    "size": [
+      0.21206,
+      0.65402,
+      0.24146
+    ],
+    "triangles": 60,
+    "meshes": 2,
+    "materials": 3,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/pottedPlant.glb"
+  },
+  "Furniture/plantSmall1": {
+    "source": "Assets/Furniture/Models/GLTF format/plantSmall1.glb",
+    "bytes": 8224,
+    "min": [
+      -0.04733,
+      0.0,
+      -0.04733
+    ],
+    "max": [
+      0.04733,
+      0.14,
+      0.04733
+    ],
+    "size": [
+      0.09466,
+      0.14,
+      0.09466
+    ],
+    "triangles": 102,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/plantSmall1.glb"
+  },
+  "Furniture/lampRoundFloor": {
+    "source": "Assets/Furniture/Models/GLTF format/lampRoundFloor.glb",
+    "bytes": 6600,
+    "min": [
+      -0.01602,
+      0.0,
+      -0.14778
+    ],
+    "max": [
+      0.13602,
+      0.86,
+      0.02778
+    ],
+    "size": [
+      0.15204,
+      0.86,
+      0.17556
+    ],
+    "triangles": 76,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/lampRoundFloor.glb"
+  },
+  "Furniture/rugRectangle": {
+    "source": "Assets/Furniture/Models/GLTF format/rugRectangle.glb",
+    "bytes": 3188,
+    "min": [
+      0.0,
+      0.0,
+      -0.92
+    ],
+    "max": [
+      1.57,
+      0.01,
+      0
+    ],
+    "size": [
+      1.57,
+      0.01,
+      0.92
+    ],
+    "triangles": 28,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/rugRectangle.glb"
+  },
+  "Furniture/toilet": {
+    "source": "Assets/Furniture/Models/GLTF format/toilet.glb",
+    "bytes": 18112,
+    "min": [
+      -0.0,
+      0.0,
+      -0.0
+    ],
+    "max": [
+      0.31255,
+      0.45097,
+      0.47718
+    ],
+    "size": [
+      0.31255,
+      0.45097,
+      0.47718
+    ],
+    "triangles": 230,
+    "meshes": 2,
+    "materials": 4,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/toilet.glb"
+  },
+  "Furniture/bathroomSink": {
+    "source": "Assets/Furniture/Models/GLTF format/bathroomSink.glb",
+    "bytes": 22536,
+    "min": [
+      0.0,
+      -0.4,
+      -0.29
+    ],
+    "max": [
+      0.34,
+      0.16,
+      0.0
+    ],
+    "size": [
+      0.34,
+      0.56,
+      0.29
+    ],
+    "triangles": 316,
+    "meshes": 1,
+    "materials": 3,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/bathroomSink.glb"
+  },
+  "Furniture/shower": {
+    "source": "Assets/Furniture/Models/GLTF format/shower.glb",
+    "bytes": 52020,
+    "min": [
+      -0.56179,
+      0.0,
+      -0.56179
+    ],
+    "max": [
+      0.0,
+      1.09403,
+      0.02
+    ],
+    "size": [
+      0.56179,
+      1.09403,
+      0.58179
+    ],
+    "triangles": 810,
+    "meshes": 3,
+    "materials": 4,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/shower.glb"
+  },
+  "Furniture/televisionModern": {
+    "source": "Assets/Furniture/Models/GLTF format/televisionModern.glb",
+    "bytes": 6368,
+    "min": [
+      -0.3424,
+      0.0,
+      -0.0642
+    ],
+    "max": [
+      0.3424,
+      0.45475,
+      0.0642
+    ],
+    "size": [
+      0.6848,
+      0.45475,
+      0.1284
+    ],
+    "triangles": 72,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/televisionModern.glb"
+  },
+  "Furniture/speaker": {
+    "source": "Assets/Furniture/Models/GLTF format/speaker.glb",
+    "bytes": 15744,
+    "min": [
+      -0.0,
+      0.0,
+      -0.148
+    ],
+    "max": [
+      0.148,
+      0.6364,
+      -0.0
+    ],
+    "size": [
+      0.148,
+      0.6364,
+      0.148
+    ],
+    "triangles": 228,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/speaker.glb"
+  },
+  "Furniture/bench": {
+    "source": "Assets/Furniture/Models/GLTF format/bench.glb",
+    "bytes": 10756,
+    "min": [
+      0.0,
+      0.0,
+      -0.2
+    ],
+    "max": [
+      0.4,
+      0.47,
+      0
+    ],
+    "size": [
+      0.4,
+      0.47,
+      0.2
+    ],
+    "triangles": 170,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/bench.glb"
+  },
+  "Furniture/trashcan": {
+    "source": "Assets/Furniture/Models/GLTF format/trashcan.glb",
+    "bytes": 6452,
+    "min": [
+      -0.10385,
+      -0.0,
+      -0.11164
+    ],
+    "max": [
+      0.10385,
+      0.42787,
+      0.12249
+    ],
+    "size": [
+      0.20769,
+      0.42787,
+      0.23412
+    ],
+    "triangles": 68,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/trashcan.glb"
+  },
+  "Furniture/coatRackStanding": {
+    "source": "Assets/Furniture/Models/GLTF format/coatRackStanding.glb",
+    "bytes": 13288,
+    "min": [
+      -0.1364,
+      0.0,
+      -0.1364
+    ],
+    "max": [
+      0.1364,
+      0.77,
+      0.1364
+    ],
+    "size": [
+      0.2728,
+      0.77,
+      0.2728
+    ],
+    "triangles": 190,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/coatRackStanding.glb"
+  },
+  "Furniture/cardboardBoxClosed": {
+    "source": "Assets/Furniture/Models/GLTF format/cardboardBoxClosed.glb",
+    "bytes": 5400,
+    "min": [
+      0.0,
+      0.0,
+      -0.2125
+    ],
+    "max": [
+      0.2125,
+      0.281,
+      0.0
+    ],
+    "size": [
+      0.2125,
+      0.281,
+      0.2125
+    ],
+    "triangles": 60,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Furniture/cardboardBoxClosed.glb"
+  },
+  "Market/cash-register": {
+    "source": "Assets/Market/Models/GLB format/cash-register.glb",
+    "bytes": 20332,
+    "min": [
+      -0.4,
+      0.0,
+      -0.4
+    ],
+    "max": [
+      0.45,
+      0.5949,
+      0.45
+    ],
+    "size": [
+      0.85,
+      0.5949,
+      0.85
+    ],
+    "triangles": 203,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Market/cash-register.glb"
+  },
+  "Market/display-bread": {
+    "source": "Assets/Market/Models/GLB format/display-bread.glb",
+    "bytes": 36640,
+    "min": [
+      -0.35,
+      0.0,
+      -0.3
+    ],
+    "max": [
+      0.35,
+      0.5,
+      0.3
+    ],
+    "size": [
+      0.7,
+      0.5,
+      0.6
+    ],
+    "triangles": 362,
+    "meshes": 3,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Market/display-bread.glb"
+  },
+  "Market/display-fruit": {
+    "source": "Assets/Market/Models/GLB format/display-fruit.glb",
+    "bytes": 62976,
+    "min": [
+      -0.3,
+      0.0,
+      -0.3
+    ],
+    "max": [
+      0.3,
+      0.51596,
+      0.3
+    ],
+    "size": [
+      0.6,
+      0.51596,
+      0.6
+    ],
+    "triangles": 650,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Market/display-fruit.glb"
+  },
+  "Market/freezer": {
+    "source": "Assets/Market/Models/GLB format/freezer.glb",
+    "bytes": 16956,
+    "min": [
+      -0.4,
+      0.0,
+      -0.3
+    ],
+    "max": [
+      0.4,
+      0.35,
+      0.3
+    ],
+    "size": [
+      0.8,
+      0.35,
+      0.6
+    ],
+    "triangles": 180,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Market/freezer.glb"
+  },
+  "Market/freezers-standing": {
+    "source": "Assets/Market/Models/GLB format/freezers-standing.glb",
+    "bytes": 15340,
+    "min": [
+      -0.5,
+      0.0,
+      -0.5
+    ],
+    "max": [
+      0.5,
+      0.9,
+      0.0
+    ],
+    "size": [
+      1.0,
+      0.9,
+      0.5
+    ],
+    "triangles": 156,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Market/freezers-standing.glb"
+  },
+  "Market/shelf-bags": {
+    "source": "Assets/Market/Models/GLB format/shelf-bags.glb",
+    "bytes": 78444,
+    "min": [
+      -0.4,
+      0.0,
+      -0.35
+    ],
+    "max": [
+      0.4,
+      0.8925,
+      0.35
+    ],
+    "size": [
+      0.8,
+      0.8925,
+      0.7
+    ],
+    "triangles": 892,
+    "meshes": 9,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Market/shelf-bags.glb"
+  },
+  "Market/shelf-boxes": {
+    "source": "Assets/Market/Models/GLB format/shelf-boxes.glb",
+    "bytes": 56780,
+    "min": [
+      -0.4,
+      0.0,
+      -0.35
+    ],
+    "max": [
+      0.4,
+      0.85,
+      0.35
+    ],
+    "size": [
+      0.8,
+      0.85,
+      0.7
+    ],
+    "triangles": 436,
+    "meshes": 11,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Market/shelf-boxes.glb"
+  },
+  "Market/shelf-end": {
+    "source": "Assets/Market/Models/GLB format/shelf-end.glb",
+    "bytes": 44560,
+    "min": [
+      -0.4,
+      -0.0,
+      -0.40111
+    ],
+    "max": [
+      0.4,
+      1.05,
+      -0.00111
+    ],
+    "size": [
+      0.8,
+      1.05,
+      0.4
+    ],
+    "triangles": 362,
+    "meshes": 8,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Market/shelf-end.glb"
+  },
+  "Market/shopping-basket": {
+    "source": "Assets/Market/Models/GLB format/shopping-basket.glb",
+    "bytes": 25864,
+    "min": [
+      -0.175,
+      0.0,
+      -0.175
+    ],
+    "max": [
+      0.175,
+      0.25,
+      0.175
+    ],
+    "size": [
+      0.35,
+      0.25,
+      0.35
+    ],
+    "triangles": 288,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Market/shopping-basket.glb"
+  },
+  "Market/shopping-cart": {
+    "source": "Assets/Market/Models/GLB format/shopping-cart.glb",
+    "bytes": 34832,
+    "min": [
+      -0.15,
+      0.0,
+      -0.25391
+    ],
+    "max": [
+      0.15,
+      0.39056,
+      0.225
+    ],
+    "size": [
+      0.3,
+      0.39056,
+      0.47891
+    ],
+    "triangles": 384,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Market/shopping-cart.glb"
+  },
+  "Market/character-employee": {
+    "source": "Assets/Market/Models/GLB format/character-employee.glb",
+    "bytes": 215836,
+    "min": [
+      -0.39028,
+      0.0,
+      -0.21088
+    ],
+    "max": [
+      0.39028,
+      0.72335,
+      0.19049
+    ],
+    "size": [
+      0.78056,
+      0.72335,
+      0.40137
+    ],
+    "triangles": 520,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": true,
+    "path": "res://art/models/Market/character-employee.glb"
+  },
+  "Nature/tree_default": {
+    "source": "Assets/Nature/Models/GLTF format/tree_default.glb",
+    "bytes": 9428,
+    "min": [
+      -0.3775,
+      -0.05,
+      -0.32692
+    ],
+    "max": [
+      0.3775,
+      1.65789,
+      0.32692
+    ],
+    "size": [
+      0.755,
+      1.70789,
+      0.65385
+    ],
+    "triangles": 114,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Nature/tree_default.glb"
+  },
+  "Nature/tree_default_fall": {
+    "source": "Assets/Nature/Models/GLTF format/tree_default_fall.glb",
+    "bytes": 16940,
+    "min": [
+      -0.3775,
+      -0.05,
+      -0.32692
+    ],
+    "max": [
+      0.3775,
+      1.65789,
+      0.32692
+    ],
+    "size": [
+      0.755,
+      1.70789,
+      0.65385
+    ],
+    "triangles": 228,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Nature/tree_default_fall.glb"
+  },
+  "Nature/tree_oak": {
+    "source": "Assets/Nature/Models/GLTF format/tree_oak.glb",
+    "bytes": 14644,
+    "min": [
+      -0.32028,
+      -0.05,
+      -0.36982
+    ],
+    "max": [
+      0.32028,
+      1.17624,
+      0.36982
+    ],
+    "size": [
+      0.64055,
+      1.22624,
+      0.73965
+    ],
+    "triangles": 196,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Nature/tree_oak.glb"
+  },
+  "Nature/tree_oak_fall": {
+    "source": "Assets/Nature/Models/GLTF format/tree_oak_fall.glb",
+    "bytes": 14640,
+    "min": [
+      -0.32028,
+      -0.05,
+      -0.36982
+    ],
+    "max": [
+      0.32028,
+      1.17624,
+      0.36982
+    ],
+    "size": [
+      0.64055,
+      1.22624,
+      0.73965
+    ],
+    "triangles": 196,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Nature/tree_oak_fall.glb"
+  },
+  "Nature/tree_pineRoundA": {
+    "source": "Assets/Nature/Models/GLTF format/tree_pineRoundA.glb",
+    "bytes": 14488,
+    "min": [
+      -0.30851,
+      -0.05,
+      -0.35624
+    ],
+    "max": [
+      0.30851,
+      1.31644,
+      0.35624
+    ],
+    "size": [
+      0.61702,
+      1.36644,
+      0.71247
+    ],
+    "triangles": 204,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Nature/tree_pineRoundA.glb"
+  },
+  "Nature/tree_small": {
+    "source": "Assets/Nature/Models/GLTF format/tree_small.glb",
+    "bytes": 6500,
+    "min": [
+      -0.17732,
+      -0.05,
+      -0.20475
+    ],
+    "max": [
+      0.17732,
+      1.06004,
+      0.20475
+    ],
+    "size": [
+      0.35464,
+      1.11004,
+      0.4095
+    ],
+    "triangles": 62,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Nature/tree_small.glb"
+  },
+  "Nature/plant_bush": {
+    "source": "Assets/Nature/Models/GLTF format/plant_bush.glb",
+    "bytes": 4396,
+    "min": [
+      -0.198,
+      -0.05,
+      -0.198
+    ],
+    "max": [
+      0.198,
+      0.19444,
+      0.198
+    ],
+    "size": [
+      0.396,
+      0.24444,
+      0.396
+    ],
+    "triangles": 32,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Nature/plant_bush.glb"
+  },
+  "Nature/plant_bushSmall": {
+    "source": "Assets/Nature/Models/GLTF format/plant_bushSmall.glb",
+    "bytes": 3212,
+    "min": [
+      -0.19149,
+      -0.05,
+      -0.16817
+    ],
+    "max": [
+      0.19149,
+      0.15729,
+      0.16817
+    ],
+    "size": [
+      0.38298,
+      0.20729,
+      0.33634
+    ],
+    "triangles": 16,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Nature/plant_bushSmall.glb"
+  },
+  "Nature/rock_smallA": {
+    "source": "Assets/Nature/Models/GLTF format/rock_smallA.glb",
+    "bytes": 3044,
+    "min": [
+      -0.1804,
+      -0.05,
+      -0.1804
+    ],
+    "max": [
+      0.1804,
+      0.14122,
+      0.1804
+    ],
+    "size": [
+      0.3608,
+      0.19122,
+      0.3608
+    ],
+    "triangles": 16,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Nature/rock_smallA.glb"
+  },
+  "Nature/flower_yellowA": {
+    "source": "Assets/Nature/Models/GLTF format/flower_yellowA.glb",
+    "bytes": 7120,
+    "min": [
+      -0.10453,
+      -0.05,
+      -0.09053
+    ],
+    "max": [
+      0.05456,
+      0.1425,
+      0.09053
+    ],
+    "size": [
+      0.1591,
+      0.1925,
+      0.18106
+    ],
+    "triangles": 76,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Nature/flower_yellowA.glb"
+  },
+  "Nature/flower_redA": {
+    "source": "Assets/Nature/Models/GLTF format/flower_redA.glb",
+    "bytes": 7104,
+    "min": [
+      -0.10453,
+      -0.05,
+      -0.09053
+    ],
+    "max": [
+      0.05456,
+      0.2425,
+      0.09053
+    ],
+    "size": [
+      0.1591,
+      0.2925,
+      0.18106
+    ],
+    "triangles": 76,
+    "meshes": 1,
+    "materials": 2,
+    "animations": [],
+    "external_images": [],
+    "skinned": false,
+    "path": "res://art/models/Nature/flower_redA.glb"
+  },
+  "MoreNature/tree-autumn": {
+    "source": "Assets/MoreNature/Models/GLB format/tree-autumn.glb",
+    "bytes": 19732,
+    "min": [
+      -0.28128,
+      0.0,
+      -0.26312
+    ],
+    "max": [
+      0.27158,
+      1.41097,
+      0.26312
+    ],
+    "size": [
+      0.55286,
+      1.41097,
+      0.52624
+    ],
+    "triangles": 198,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/MoreNature/tree-autumn.glb"
+  },
+  "MoreNature/tree-autumn-tall": {
+    "source": "Assets/MoreNature/Models/GLB format/tree-autumn-tall.glb",
+    "bytes": 19748,
+    "min": [
+      -0.28128,
+      0.0,
+      -0.26312
+    ],
+    "max": [
+      0.27158,
+      1.71097,
+      0.26312
+    ],
+    "size": [
+      0.55286,
+      1.71097,
+      0.52624
+    ],
+    "triangles": 198,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/MoreNature/tree-autumn-tall.glb"
+  },
+  "MoreNature/rock-a": {
+    "source": "Assets/MoreNature/Models/GLB format/rock-a.glb",
+    "bytes": 10812,
+    "min": [
+      -0.3,
+      0.0,
+      -0.29712
+    ],
+    "max": [
+      0.25518,
+      0.3927,
+      0.32446
+    ],
+    "size": [
+      0.55518,
+      0.3927,
+      0.62158
+    ],
+    "triangles": 104,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/MoreNature/rock-a.glb"
+  },
+  "MoreNature/box": {
+    "source": "Assets/MoreNature/Models/GLB format/box.glb",
+    "bytes": 14056,
+    "min": [
+      -0.125,
+      0.0,
+      -0.125
+    ],
+    "max": [
+      0.125,
+      0.25,
+      0.125
+    ],
+    "size": [
+      0.25,
+      0.25,
+      0.25
+    ],
+    "triangles": 124,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/MoreNature/box.glb"
+  },
+  "MoreNature/barrel": {
+    "source": "Assets/MoreNature/Models/GLB format/barrel.glb",
+    "bytes": 34256,
+    "min": [
+      -0.11825,
+      0.0,
+      -0.11825
+    ],
+    "max": [
+      0.11825,
+      0.344,
+      0.11825
+    ],
+    "size": [
+      0.2365,
+      0.344,
+      0.2365
+    ],
+    "triangles": 412,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/MoreNature/barrel.glb"
+  },
+  "Blasters/blaster-a": {
+    "source": "Assets/Blasters/Models/GLB format/blaster-a.glb",
+    "bytes": 44992,
+    "min": [
+      -0.0919,
+      -0.30295,
+      -0.37
+    ],
+    "max": [
+      0.0919,
+      0.15295,
+      0.43
+    ],
+    "size": [
+      0.1838,
+      0.4559,
+      0.8
+    ],
+    "triangles": 470,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Blasters/blaster-a.glb"
+  },
+  "Blasters/blaster-b": {
+    "source": "Assets/Blasters/Models/GLB format/blaster-b.glb",
+    "bytes": 34380,
+    "min": [
+      -0.0775,
+      -0.19708,
+      -0.2601
+    ],
+    "max": [
+      0.0775,
+      0.1134,
+      0.16
+    ],
+    "size": [
+      0.155,
+      0.31048,
+      0.4201
+    ],
+    "triangles": 368,
+    "meshes": 1,
+    "materials": 1,
+    "animations": [],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Blasters/blaster-b.glb"
+  },
+  "Blasters/crate-small": {
+    "source": "Assets/Blasters/Models/GLB format/crate-small.glb",
+    "bytes": 59020,
+    "min": [
+      -0.27951,
+      -0.02,
+      -0.4
+    ],
+    "max": [
+      0.27,
+      0.35,
+      0.4
+    ],
+    "size": [
+      0.54951,
+      0.37,
+      0.8
+    ],
+    "triangles": 628,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "open",
+      "close",
+      "open-close"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Blasters/crate-small.glb"
+  },
+  "Blasters/crate-medium": {
+    "source": "Assets/Blasters/Models/GLB format/crate-medium.glb",
+    "bytes": 59344,
+    "min": [
+      -0.27951,
+      -0.02,
+      -0.5
+    ],
+    "max": [
+      0.27,
+      0.35,
+      0.5
+    ],
+    "size": [
+      0.54951,
+      0.37,
+      1.0
+    ],
+    "triangles": 628,
+    "meshes": 2,
+    "materials": 1,
+    "animations": [
+      "open",
+      "close",
+      "open-close"
+    ],
+    "external_images": [
+      "Textures/colormap.png"
+    ],
+    "skinned": false,
+    "path": "res://art/models/Blasters/crate-medium.glb"
+  }
+}

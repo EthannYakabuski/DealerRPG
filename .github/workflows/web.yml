@@ -1,0 +1,72 @@
+name: Build and publish NIGHT SCHOOL
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: night-school-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Test and export on Windows
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out the game
+        uses: actions/checkout@v6
+        with:
+          # This runner may also hold local source asset packs.
+          clean: false
+      - name: Import, test, and export
+        env:
+          GODOT_EXE: ${{ vars.GODOT_EXE }}
+        run: ./scripts/build_web.ps1
+      - name: Select Git Bash for Pages packaging
+        run: |
+          $gitRoot = Split-Path -Parent (Split-Path -Parent (Get-Command git).Source)
+          $gitBash = Join-Path $gitRoot 'bin'
+          $gitTools = Join-Path $gitRoot 'usr/bin'
+          if (-not (Test-Path (Join-Path $gitBash 'bash.exe'))) {
+            throw 'Install Git for Windows with Git Bash to package the Pages artifact.'
+          }
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $gitBash
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $gitTools
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: build/logs
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/web
+
+  deploy:
+    name: Publish to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

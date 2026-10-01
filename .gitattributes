@@ -1,0 +1,14 @@
+*.gd text eol=lf
+*.gdshader text eol=lf
+*.gdextension text eol=lf
+*.tscn text eol=lf
+*.tres text eol=lf
+*.godot text eol=lf
+*.import text eol=lf
+*.uid text eol=lf
+*.yml text eol=lf
+*.mjs text eol=lf
+*.py text eol=lf
+*.glb binary
+*.png binary
+*.ogg binary
