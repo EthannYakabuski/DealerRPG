@@ -1,16 +1,16 @@
 # Living-city iteration checkpoint — 2026-10-02
 
-Base release: `525c717` on main; https://ethannyakabuski.github.io/DealerRPG/.
+Completed release: `2931d27880c4051e200e7b88cac5508ffe201c53` on main; https://ethannyakabuski.github.io/DealerRPG/. Prior release: `525c717`.
 User requests A–N: varied ambiguous street responses; intuitive controller supplier quantities/confirmation; aligned crossings; additional outskirts walkers and patrols; clear sidewalks; physical apartment parties 17:00–02:00 with optional individual sales; repeat-location police pressure; escalating hide times 10,10,15,20,25,30,+10; extra patrol expiry after a quiet day; NPC parking/car trips; slow skateboarding on grass; supplied NPC emotes.
 
-## Ownership and implementation complete; release verification underway
+## Implementation and release verification complete
 
 - Root: main/player, new party actor helper and integration tests, checkpoint, final native/browser QA and publish.
 - customer_pacing: game_state/game_data, dialogue variety, live party state, enforcement state/save compatibility, state tests, SYSTEMS_API.
 - city_motion: world/population, crossings/sidewalks, 42 existing +15 new outskirts citizens, baseline patrols7→10 plus pressure units, NPC car-trip helper, geometry/population tests.
 - hud_audio: interface/controller bundle stepper, party UI, emote helper/assets, UI tests/captures.
 
-No commits for this iteration yet. Preserve original untracked Assets/MoreNature, Nature, UI_Dialogs, UI_emotes, UI_input, skybox packs. Do not stage them wholesale.
+The game changes are committed and published. Preserve original untracked Assets/MoreNature, Nature, UI_Dialogs, UI_emotes, UI_input, skybox packs. Do not stage them wholesale.
 
 ## Contracts
 
@@ -19,7 +19,7 @@ No commits for this iteration yet. Preserve original untracked Assets/MoreNature
 - Root party helper owns separate node, uses population navigation for outside walks, apartment slots inside, root guards physical conversations. Optional `world_state.party_walks` up to8 records contact_id/state/position/slot.
 - Police: `Game.register_pursuit(location_id)` called once per new pursuit; `escape_duration_seconds()` returns escalation; `police_pressure_locations()` returns location/expiry/strength/watch/incident counts. Cap4 additional officers/location and8 visible globally; persistent underlying pressure expires after1440 quiet game minutes.
 - State cosmetic signals: street_reaction(npc_id,kind), meeting_reaction(meeting_id,kind), party_reaction(contact_id,kind), meeting_missed(id,contact_id). Existing civilian_reaction(report) remains physical runner.
-- UI proposed party conversations reuse show_conversation with actor_id `party:<contact_id>`, party_guest flag; root conversation_action branches to physical party helper.
+- Party conversations reuse show_conversation with actor_id `party:<contact_id>`, party_guest flag; root conversation_action branches to physical party helper.
 
 ## Verification / environment
 
@@ -31,8 +31,10 @@ Last release607 checks passed. This iteration's focused tests passed: state310, 
 
 Full scripts/build_web.ps1 completed successfully2026-10-02:773 counted checks plus world geometry/cutaway audits, clean logs,40.5 MB export. Local browser Gamepad tutorial and supplier quantity/down/up/confirm flow passed with zero browser errors; insufficient cash is correctly rejected. A missing browser-only arrow glyph was replaced with words and re-exported (the only post-suite source change). Local campus benchmark35.6FPS, p95frame33.6ms onGT1030; prior sample45.4FPS. Native UI1280/960 and five crossings/commuter routes visually verified.
 
-Final local reload and commit/push pending. Publishing already authorized; assess_game_workflow agent confirmed runneronline/idle, authenticatedGitHub access and Pages healthy, awaiting releaseSHA. Preserve generated screenshots/logs only under ignored build/. Own temporary preview serverPID90080; QA ChromePID65336, both should be closed when releaseverification finishes. Do not stop unrelated processes.
+Deployment succeeded at https://github.com/EthannYakabuski/DealerRPG/actions/runs/37055354410 for the exact release SHA above. CI independently passed all 773 checks, world geometry and cutaway audits, and the 40.5 MB export. A fresh public-browser session verified the new supplier help text, quantity increment and direct Down-to-pickup focus with zero console errors, exceptions or network failures. Reports/screenshots use build/logs/living-city-* and build/screenshots/living-city-*.
+
+No required implementation or verification remains. Ambient commuter parking resets on reload; player vehicles and campaign/party progress persist. Temporary QA browsers and the local preview server were closed. Original asset packs are the only remaining untracked worktree files. This final checkpoint is documentation only; the tested game release remains the SHA above.
 
 Usage at start:18% weekly remaining. User will apply a reset if needed; do not redeem a credit without explicit confirmation. Keep this file updated at milestones so continuation can resume without repeating work.
 
-Latest reported usage7% remaining; user informed. No reset requested or redeemed byagent.
+Latest checked usage: 6% remaining. No reset requested or redeemed by agent.
