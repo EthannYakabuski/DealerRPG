@@ -7,6 +7,8 @@ signal notification(text: String)
 signal ended(won: bool, reason: String)
 signal crime_committed(severity: float)
 signal feedback_event(kind: String, value: float)
+signal civilian_reaction(npc_id: String, reaction: String)
+signal police_tip(location_id: String, severity: float)
 
 const Data = preload("res://scripts/game_data.gd")
 const TIME_SCALE: float = 3.0
@@ -34,6 +36,9 @@ var inventory: Dictionary = {}
 var contacts: Array[Dictionary] = []
 var inbox: Array[Dictionary] = []
 var meetings: Array[Dictionary] = []
+var introductions: Array[Dictionary] = []
+var callbacks: Array[Dictionary] = []
+var street_npcs: Dictionary = {}
 var status: String = "playing"
 var ending_reason: String = ""
 var missed_classes: int = 0
@@ -87,6 +92,9 @@ func restart_game(delete_save: bool = true) -> void:
 	contacts.clear()
 	inbox.clear()
 	meetings.clear()
+	introductions.clear()
+	callbacks.clear()
+	street_npcs.clear()
 	status = "playing"
 	ending_reason = ""
 	missed_classes = 0
@@ -211,15 +219,17 @@ func add_tutorial_contact() -> bool:
 func schedule_meeting(message_id: int, location_id: String, delay_minutes: float = 90.0, price: float = 22.0) -> bool:
 	if not _can_act() or tutorial_step < 3: return false
 	if not _valid_location(location_id): return _fail("Choose a real meeting location.")
-	if not is_finite(delay_minutes) or delay_minutes < 30.0 or delay_minutes > 240.0:
-		return _fail("Meetings must be scheduled 30–240 minutes from now.")
+	if not is_finite(delay_minutes) or delay_minutes < 30.0 or delay_minutes > 480.0:
+		return _fail("Meetings must be scheduled 30–480 minutes from now.")
 	if not is_finite(price) or price < 12.0 or price > 40.0:
 		return _fail("Choose a price from $12 to $40 per bag.")
 	if active_meetings().size() >= 5: return _fail("Your agenda is full. Finish or cancel a meeting first.")
 	for message: Dictionary in inbox:
 		if int(message["id"]) != message_id: continue
+		if str(message.get("type", "client")) == "supplier_callback": return _fail("Call the supplier back to arrange the next night pickup.")
 		if str(message["status"]) != "new" or minute > float(message["expires_minute"]):
 			return _fail("That request has expired or was already answered.")
+		if price > float(message.get("max_price", 40.0)): return _fail("They only agreed to the discounted price of $%d or less." % int(message["max_price"]))
 		var due: float = minute + delay_minutes
 		if _overlaps_class(due): return _fail("That time conflicts with class. Choose another time.")
 		for meeting: Dictionary in meetings:
@@ -276,6 +286,10 @@ func complete_meeting(meeting_id: int) -> bool:
 		_notify("Sold %d bags to %s for $%d. Relationship %s." % [quantity, contact["name"], int(earnings), "+%.0f" % relationship_change if relationship_change >= 0.0 else "%.0f" % relationship_change])
 		feedback_event.emit("sale", earnings)
 		report_crime(10.0 + quantity * 2.0)
+		if bool(contact.get("_informant", false)) and not bool(contact.get("_sting_triggered", false)):
+			contact["_sting_triggered"] = true
+			_notify("Your contact steps away and speaks into their sleeve. Police have your meeting location — move!")
+			police_tip.emit(str(meeting["location_id"]), 85.0)
 		_maybe_referral(contact)
 		_mark_changed()
 		return true
@@ -307,16 +321,19 @@ func supplier_order(tier: int = 0, bundles: int = 1) -> bool:
 	if active_meetings().size() >= 5: return _fail("Your agenda is full.")
 	for existing: Dictionary in meetings:
 		if existing["status"] == "scheduled" and existing["type"] == "supplier": return _fail("Finish your current supplier meeting first.")
-	var due: float = minute + 60.0
-	for existing: Dictionary in active_meetings():
-		if absf(float(existing["due_minute"]) - due) < 35.0: due = float(existing["due_minute"]) + 45.0
-	if _overlaps_class(due): due = float(day_number() - 1) * MINUTES_PER_DAY + CLASS_END + 45.0
+	for callback: Dictionary in callbacks:
+		if callback["kind"] == "supplier" and callback["status"] == "pending": return _fail("Your supplier will call back later. Wait for their text before ordering again.")
+	var due: float = next_supplier_minute()
 	meetings.append({"id": _new_id(), "type": "supplier", "contact_id": "supplier_%d" % tier, "contact_name": supplier["name"], "location_id": supplier["location_id"], "due_minute": due, "quantity": bundles, "price": supplier["bundle_price"], "cost": cost, "tier": tier, "quality": supplier["quality"], "risk": minf(0.5, float(supplier["risk"]) + maxf(0.0, bundles - 3) * 0.015), "status": "scheduled", "created_minute": minute})
-	_notify("%s: Bring $%d to the west parking lot at %s. Bigger orders attract more attention." % [supplier["name"], int(cost), format_minute(due)])
+	for message: Dictionary in inbox:
+		if message.get("type", "") == "supplier_callback" and message["status"] == "new": message["status"] = "accepted"
+	_notify("%s: Bring $%d to the west parking lot on day %d at %s. Pickups run 22:00–02:00; bigger orders attract attention." % [supplier["name"], int(cost), int(due / MINUTES_PER_DAY) + 1, format_minute(due)])
 	_mark_changed()
 	return true
 
 func _complete_supplier(meeting: Dictionary) -> bool:
+	var time_of_day: float = fmod(minute, MINUTES_PER_DAY)
+	if time_of_day >= 120.0 and time_of_day < 1320.0: return _fail("Supplier handoffs only happen between 22:00 and 02:00. Wait for opening or arrange another night.")
 	var quantity: int = int(meeting["quantity"])
 	var cost: float = float(meeting["cost"])
 	if cash < cost: return _fail("You need $%d to close this deal." % int(cost))
@@ -332,6 +349,7 @@ func _complete_supplier(meeting: Dictionary) -> bool:
 	if bust:
 		_notify("Something is wrong. A lookout spotted police closing in — move!")
 		report_crime(65.0)
+		police_tip.emit(str(meeting["location_id"]), 65.0)
 	else:
 		report_crime(12.0 + quantity * 2.0)
 	_mark_changed()
@@ -525,6 +543,7 @@ func advance_time(minutes: float) -> void:
 		if status != "playing": break
 		_resolve_meetings()
 		if tutorial_step >= 3:
+			_process_callbacks()
 			_generate_messages()
 	if hunger < 20.0 and not _low_food_warned and status == "playing":
 		_low_food_warned = true
@@ -624,7 +643,10 @@ func _generate_messages() -> void:
 		_create_request(candidates[_rng.randi_range(0, candidates.size() - 1)])
 
 func _contact_can_request(contact: Dictionary) -> bool:
+	if bool(contact.get("blocked", false)): return false
 	if minute < float(contact.get("next_request_minute", minute)): return false
+	for callback: Dictionary in callbacks:
+		if callback["status"] == "pending" and callback["contact_id"] == contact["id"]: return false
 	for message: Dictionary in inbox:
 		if message["contact_id"] == contact["id"] and message["status"] == "new": return false
 	for meeting: Dictionary in meetings:
@@ -636,33 +658,318 @@ func _reorder_delay(quantity: int) -> float:
 	# little variation keeps the whole contact list from texting simultaneously.
 	return REORDER_MINUTES + _rng.randf_range(0.0, 120.0) + maxf(0.0, quantity - 1) * 30.0
 
-func _create_request(contact: Dictionary) -> bool:
-	if not _contact_can_request(contact): return false
+func _create_request(contact: Dictionary, proactive: bool = false) -> bool:
+	if proactive:
+		if not _can_proactive_request(contact) or _contact_has_business(str(contact["id"])): return false
+	elif not _contact_can_request(contact): return false
 	var maximum: int = mini(6, 2 + reputation / 6)
 	var quantity: int = _rng.randi_range(1, maximum)
 	if reputation == 0: quantity = 2
 	inbox.append({"id": _new_id(), "contact_id": contact["id"], "contact_name": contact["name"], "quantity": quantity, "text": "Hey, can I grab %d bags? Pick a place and time that works for you." % quantity, "status": "new", "created_minute": minute, "expires_minute": minute + 210.0, "suggested_price": 24.0})
-	contact["next_request_minute"] = minute + REQUEST_RETRY_MINUTES
+	contact["next_request_minute"] = maxf(float(contact["next_request_minute"]), minute + REQUEST_RETRY_MINUTES)
 	_notify("New text from %s." % contact["name"])
 	feedback_event.emit("text", 0.0)
 	return true
 
 func _maybe_referral(contact: Dictionary) -> void:
 	var target_count: int = mini(Data.CONTACT_NAMES.size(), 1 + reputation / 2)
-	if contacts.size() >= target_count or float(contact["relationship"]) < 40.0: return
-	var index: int = contacts.size()
-	var contact_name: String = Data.CONTACT_NAMES[index]
-	_add_contact("contact_%d" % index, contact_name, 40.0 + float(contact["relationship"]) * 0.1)
-	_notify("%s put in a good word. %s added you — your circle is growing." % [contact["name"], contact_name])
-	_create_request(contacts.back())
+	var pending: int = 0
+	for entry: Dictionary in introductions:
+		if entry["status"] == "pending": pending += 1
+	if contacts.size() + pending >= target_count or float(contact["relationship"]) < 40.0: return
+	var contact_name: String = ""
+	for candidate: String in Data.CONTACT_NAMES:
+		var used: bool = false
+		for known: Dictionary in contacts:
+			if known["name"] == candidate: used = true
+		for entry: Dictionary in introductions:
+			if entry["name"] == candidate: used = true
+		if not used:
+			contact_name = candidate
+			break
+	if contact_name.is_empty(): return
+	var informant: bool = _rng.randf() < minf(0.26, 0.12 + heat * 0.0014)
+	var accurate_cover: bool = not informant or _rng.randf() < 0.35
+	var background: Dictionary = Data.contact_background(str(contact["name"]))
+	var claimed_course: String = str(background["course"]) if accurate_cover else ("chemistry" if background["course"] != "chemistry" else "history")
+	introductions.append({"id": _new_id(), "name": contact_name, "referrer_id": str(contact["id"]), "referrer_name": str(contact["name"]), "status": "pending", "created_minute": minute, "text": "Hey, %s said you might know where to get a couple of bags. Are you around?" % contact["name"], "who_answer": "", "connection_answer": "", "_informant": informant, "_cover_course": claimed_course, "_cover_hangout": background["hangout"]})
+	_notify("Unknown number: %s says they know %s. Ask a few questions before saving the number." % [contact_name, contact["name"]])
+	feedback_event.emit("text", 0.0)
 
 func _add_contact(contact_id: String, contact_name: String, relationship: float) -> void:
-	contacts.append({"id": contact_id, "name": contact_name, "relationship": relationship, "sales": 0, "last_sale_minute": -1.0, "last_order_quantity": 1, "next_request_minute": minute})
+	contacts.append({"id": contact_id, "name": contact_name, "relationship": relationship, "sales": 0, "last_sale_minute": -1.0, "last_order_quantity": 1, "next_request_minute": minute, "next_outreach_minute": 0.0, "last_text_minute": -1.0, "last_reply": "", "blocked": false})
 
 func _find_contact(contact_id: String) -> Dictionary:
 	for contact: Dictionary in contacts:
 		if str(contact["id"]) == contact_id: return contact
 	return {}
+
+func contact_profile(contact_id: String) -> Dictionary:
+	var contact: Dictionary = _find_contact(contact_id)
+	if contact.is_empty(): return {}
+	var result: Dictionary = Data.contact_background(str(contact["name"]))
+	result.merge({"id": contact_id, "name": str(contact["name"]), "last_reply": str(contact.get("last_reply", "")), "last_text_minute": float(contact.get("last_text_minute", -1.0)), "next_outreach_minute": float(contact.get("next_outreach_minute", 0.0))})
+	return result
+
+func pending_introductions() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for entry: Dictionary in introductions:
+		if entry["status"] != "pending": continue
+		var public_entry: Dictionary = {}
+		for key: String in ["id", "name", "text", "referrer_name", "referrer_id", "who_answer", "connection_answer", "status"]: public_entry[key] = entry[key]
+		result.append(public_entry)
+	return result
+
+func ask_introduction(introduction_id: int, question: String) -> String:
+	if not _can_act() or question not in ["referrer", "connection"]: return ""
+	for entry: Dictionary in introductions:
+		if int(entry["id"]) != introduction_id or entry["status"] != "pending": continue
+		var answer: String
+		if question == "referrer":
+			answer = "%s gave me your number. Said you might be able to help." % entry["referrer_name"]
+			entry["who_answer"] = answer
+		else:
+			answer = "We know each other from %s. Usually see them at %s." % [entry["_cover_course"], entry["_cover_hangout"]]
+			entry["connection_answer"] = answer
+		_mark_changed()
+		return answer
+	return ""
+
+func resolve_introduction(introduction_id: int, decision: String) -> bool:
+	if not _can_act() or decision not in ["accept", "decline", "block"]: return false
+	for entry: Dictionary in introductions:
+		if int(entry["id"]) != introduction_id or entry["status"] != "pending": continue
+		entry["status"] = {"accept": "accepted", "decline": "declined", "block": "blocked"}[decision]
+		if decision == "accept":
+			var contact_id: String = "referral_%d" % introduction_id
+			_add_contact(contact_id, str(entry["name"]), 42.0)
+			var contact: Dictionary = contacts.back()
+			contact["_informant"] = bool(entry["_informant"])
+			contact["_sting_triggered"] = false
+			contact["referrer_id"] = entry["referrer_id"]
+			_create_request(contact)
+			_notify("%s saved. An introduction is a starting point, not a guarantee. Choose any meeting yourself." % entry["name"])
+		else:
+			_notify("Number blocked." if decision == "block" else "You passed on the introduction. No meeting was arranged.")
+		_mark_changed()
+		return true
+	return _fail("That introduction has already been handled.")
+
+func text_contact(contact_id: String) -> bool:
+	if not _can_act() or tutorial_step < 3: return false
+	var contact: Dictionary = _find_contact(contact_id)
+	if contact.is_empty() or bool(contact.get("blocked", false)): return _fail("That contact is unavailable.")
+	if minute < float(contact.get("next_outreach_minute", 0.0)): return _fail("Give them a few hours before texting again.")
+	if _contact_has_business(contact_id): return _fail("You already have a request, callback or meeting with them.")
+	contact["next_outreach_minute"] = minute + REQUEST_RETRY_MINUTES
+	contact["last_text_minute"] = minute
+	var interested: bool = _can_proactive_request(contact) and _rng.randf() < 0.20 + float(contact["relationship"]) * 0.001
+	if interested and _create_request(contact, true):
+		var message: Dictionary = inbox.back()
+		var discounted: bool = _rng.randf() < 0.7
+		message["quantity"] = 1
+		if discounted:
+			message["suggested_price"] = 20.0
+			message["max_price"] = 20.0
+			message["text"] = "Wasn't planning on it, but I could grab one for $20. Pick a place and time if that works."
+		else:
+			message["text"] = "Good timing. I could use one. Where and when?"
+		contact["last_reply"] = message["text"]
+	else:
+		contact["last_reply"] = "I'm good for now, thanks. Try me another time."
+		feedback_event.emit("text", 0.0)
+	_notify("%s: %s" % [contact["name"], contact["last_reply"]])
+	_mark_changed()
+	return true
+
+func _can_proactive_request(contact: Dictionary) -> bool:
+	if bool(contact.get("blocked", false)): return false
+	var last_sale: float = float(contact["last_sale_minute"])
+	var gap: float = 180.0 + maxf(0.0, float(contact.get("last_order_quantity", 1)) - 1.0) * 30.0
+	return last_sale < 0.0 or minute >= last_sale + gap
+
+func _contact_has_business(contact_id: String) -> bool:
+	for message: Dictionary in inbox:
+		if message["contact_id"] == contact_id and message["status"] == "new": return true
+	for meeting: Dictionary in meetings:
+		if meeting["contact_id"] == contact_id and meeting["status"] == "scheduled": return true
+	for callback: Dictionary in callbacks:
+		if callback["contact_id"] == contact_id and callback["status"] == "pending": return true
+	return false
+
+func street_conversation(npc_id: String, npc_name: String = "Neighbour") -> Dictionary:
+	if npc_id.is_empty() or npc_id.length() > 80 or not _can_act(): return {}
+	if not street_npcs.has(npc_id):
+		if street_npcs.size() >= 128: return {}
+		var roll: float = _rng.randf()
+		street_npcs[npc_id] = {"name": npc_name.left(60), "response": "sale" if roll < 0.60 else ("refusal" if roll < 0.91 else "report"), "status": "idle", "next_offer_minute": 0.0, "last_sale_minute": -1.0, "sales": 0, "contact_id": "", "text": "Hey. What's up?"}
+	var npc: Dictionary = street_npcs[npc_id]
+	var contact: Dictionary = _find_contact(str(npc["contact_id"]))
+	var ready: bool = minute >= float(npc["next_offer_minute"]) and (contact.is_empty() or (minute >= float(contact["next_request_minute"]) and not _contact_has_business(str(contact["id"]))))
+	return {"npc_id": npc_id, "name": str(npc["name"]), "text": str(npc["text"]), "can_offer": tutorial_step >= 3 and ready and npc["status"] not in ["reporting", "reported"], "can_add_contact": int(npc["sales"]) > 0 and str(npc["contact_id"]).is_empty(), "sold": int(npc["sales"]) > 0, "price": 22.0, "contact_id": str(npc["contact_id"])}
+
+func offer_street_sale(npc_id: String) -> bool:
+	if not _can_act() or tutorial_step < 3 or not street_npcs.has(npc_id): return false
+	var view: Dictionary = street_conversation(npc_id)
+	if not bool(view.get("can_offer", false)): return _fail("They aren't looking for another offer right now.")
+	if int(inventory["dime_bag"]) < 1: return _fail("Pack a dime bag before offering a sale.")
+	var npc: Dictionary = street_npcs[npc_id]
+	npc["next_offer_minute"] = minute + REQUEST_RETRY_MINUTES
+	if npc["response"] == "refusal":
+		npc["text"] = "No thanks. I'm not interested."
+		_notify("%s: %s" % [npc["name"], npc["text"]])
+		_mark_changed()
+		return false
+	if npc["response"] == "report":
+		npc["status"] = "reporting"
+		npc["text"] = "Stay away from me. I'm telling an officer."
+		_notify("%s backs away and starts looking for a police officer." % npc["name"])
+		civilian_reaction.emit(npc_id, "report")
+		_mark_changed()
+		return false
+	inventory["dime_bag"] = int(inventory["dime_bag"]) - 1
+	cash += 22.0
+	total_earned += 22.0
+	total_sales += 1
+	reputation += 1
+	npc["sales"] = int(npc["sales"]) + 1
+	npc["status"] = "sold"
+	npc["last_sale_minute"] = minute
+	npc["next_offer_minute"] = minute + _reorder_delay(1)
+	npc["text"] = "Thanks. Save my number if you want to keep in touch."
+	var contact: Dictionary = _find_contact(str(npc["contact_id"]))
+	if not contact.is_empty():
+		contact["sales"] = int(contact["sales"]) + 1
+		contact["last_sale_minute"] = minute
+		contact["last_order_quantity"] = 1
+		contact["next_request_minute"] = npc["next_offer_minute"]
+		contact["relationship"] = minf(100.0, float(contact["relationship"]) + 3.0)
+		_maybe_referral(contact)
+	_notify("Sold one bag to %s for $22." % npc["name"])
+	feedback_event.emit("sale", 22.0)
+	report_crime(12.0)
+	_mark_changed()
+	return true
+
+func add_street_contact(npc_id: String) -> bool:
+	if not _can_act() or not street_npcs.has(npc_id): return false
+	var npc: Dictionary = street_npcs[npc_id]
+	if int(npc["sales"]) < 1 or not str(npc["contact_id"]).is_empty(): return _fail("Make a sale before exchanging numbers, or check your saved contacts.")
+	var contact_id: String = "street_" + npc_id
+	_add_contact(contact_id, str(npc["name"]), 45.0)
+	var contact: Dictionary = contacts.back()
+	contact["sales"] = npc["sales"]
+	contact["last_sale_minute"] = npc["last_sale_minute"]
+	contact["next_request_minute"] = npc["next_offer_minute"]
+	npc["contact_id"] = contact_id
+	npc["text"] = "Number saved. I'll text when I'm looking again."
+	_notify("%s added to your contacts." % npc["name"])
+	_mark_changed()
+	return true
+
+func pending_civilian_reports() -> Array[String]:
+	var result: Array[String] = []
+	for npc_id: String in street_npcs:
+		if street_npcs[npc_id]["status"] == "reporting": result.append(npc_id)
+	return result
+
+func civilian_report_arrived(npc_id: String) -> bool:
+	if not _can_act() or not street_npcs.has(npc_id) or street_npcs[npc_id]["status"] != "reporting": return false
+	street_npcs[npc_id]["status"] = "reported"
+	_mark_changed()
+	return true
+
+func next_supplier_minute(earliest: float = -1.0) -> float:
+	var due: float = maxf(minute + 60.0, earliest if is_finite(earliest) else minute + 60.0)
+	for attempt: int in range(40):
+		var time_of_day: float = fmod(due, MINUTES_PER_DAY)
+		if time_of_day >= 120.0 and time_of_day < 1320.0: due += 1320.0 - time_of_day
+		var conflict: bool = false
+		for existing: Dictionary in active_meetings():
+			if absf(float(existing["due_minute"]) - due) < 35.0:
+				due = float(existing["due_minute"]) + 35.0
+				conflict = true
+				break
+		if not conflict: return due
+	return due
+
+func accept_supplier_callback(message_id: int) -> bool:
+	if not _can_act(): return false
+	for message: Dictionary in inbox:
+		if int(message["id"]) != message_id: continue
+		if message.get("type", "") != "supplier_callback" or message["status"] != "new" or minute > float(message["expires_minute"]): return _fail("That supplier callback is no longer available.")
+		return supplier_order(int(message["tier"]), int(message["bundles"]))
+	return _fail("That supplier callback could not be found.")
+
+func _next_business_minute(earliest: float) -> float:
+	var time_of_day: float = fmod(earliest, MINUTES_PER_DAY)
+	if time_of_day < 420.0: return earliest + 420.0 - time_of_day
+	if time_of_day > 1380.0: return earliest + MINUTES_PER_DAY - time_of_day + 420.0
+	return earliest
+
+func request_tomorrow(message_id: int) -> bool:
+	if not _can_act(): return false
+	for message: Dictionary in inbox:
+		if int(message["id"]) != message_id: continue
+		if message["status"] != "new" or minute > float(message["expires_minute"]): return _fail("That request is no longer available.")
+		if message.get("type", "client") == "supplier_callback": return _fail("Use the supplier callback to arrange a night pickup.")
+		var contact: Dictionary = _find_contact(str(message["contact_id"]))
+		if contact.is_empty(): return false
+		var due: float = _next_business_minute(maxf(float(day_number()) * MINUTES_PER_DAY + 540.0, float(contact["next_request_minute"])))
+		message["status"] = "postponed"
+		contact["next_request_minute"] = due
+		_queue_callback("client", str(contact["id"]), str(contact["name"]), due)
+		_notify("%s: Sure, I'll hit you up tomorrow. No meeting booked yet." % contact["name"])
+		_mark_changed()
+		return true
+	return _fail("That text could not be found.")
+
+func postpone_meeting(meeting_id: int, delay_minutes: float = 120.0) -> bool:
+	if not _can_act() or not is_finite(delay_minutes) or delay_minutes < 120.0 or delay_minutes > 480.0: return false
+	for meeting: Dictionary in meetings:
+		if int(meeting["id"]) != meeting_id or meeting["status"] != "scheduled": continue
+		if player_location_id != str(meeting["location_id"]): return _fail("Speak to them at the meeting to postpone without a penalty.")
+		if minute < float(meeting["due_minute"]) - MEETING_ARRIVAL_MINUTES or minute > float(meeting["due_minute"]) + _meeting_grace(meeting): return _fail("They aren't available at the meeting yet.")
+		meeting["status"] = "postponed"
+		var kind: String = str(meeting["type"])
+		var due: float = _next_business_minute(minute + delay_minutes) if kind == "client" else next_supplier_minute(minute + delay_minutes)
+		var contact: Dictionary = _find_contact(str(meeting["contact_id"]))
+		if not contact.is_empty(): contact["next_request_minute"] = due
+		_queue_callback(kind, str(meeting["contact_id"]), str(meeting["contact_name"]), due, int(meeting["tier"]), int(meeting["quantity"]))
+		_notify("%s: No problem. I'll text again on day %d at about %s. We'll agree on a new meeting then." % [meeting["contact_name"], int(due / MINUTES_PER_DAY) + 1, format_minute(due)])
+		_mark_changed()
+		return true
+	return _fail("That meeting is already finished.")
+
+func _queue_callback(kind: String, contact_id: String, contact_name: String, due: float, tier: int = -1, bundles: int = 1) -> void:
+	for callback: Dictionary in callbacks:
+		if callback["contact_id"] == contact_id and callback["status"] == "pending": return
+	callbacks.append({"id": _new_id(), "kind": kind, "contact_id": contact_id, "contact_name": contact_name, "due_minute": due, "tier": tier, "bundles": bundles, "status": "pending"})
+	while callbacks.size() > 80:
+		var removed: bool = false
+		for index: int in range(callbacks.size()):
+			if callbacks[index]["status"] != "pending":
+				callbacks.remove_at(index)
+				removed = true
+				break
+		if not removed: break
+
+func _process_callbacks() -> void:
+	for callback: Dictionary in callbacks:
+		if callback["status"] != "pending" or minute < float(callback["due_minute"]): continue
+		if callback["kind"] == "supplier":
+			callback["status"] = "delivered"
+			inbox.append({"id": _new_id(), "type": "supplier_callback", "contact_id": callback["contact_id"], "contact_name": callback["contact_name"], "quantity": callback["bundles"], "bundles": callback["bundles"], "tier": callback["tier"], "text": "Ready to try again? Call me back and we'll agree on a new pickup between 22:00 and 02:00.", "status": "new", "created_minute": minute, "expires_minute": minute + 240.0, "suggested_price": 0.0})
+			_notify("Supplier callback from %s. A new pickup still needs your confirmation." % callback["contact_name"])
+			feedback_event.emit("text", 0.0)
+		else:
+			var contact: Dictionary = _find_contact(str(callback["contact_id"]))
+			if contact.is_empty() or bool(contact.get("blocked", false)):
+				callback["status"] = "cancelled"
+				continue
+			if minute < _next_business_minute(minute): continue
+			callback["status"] = "delivered"
+			if not _create_request(contact): callback["status"] = "pending"
 
 func _valid_location(location_id: String) -> bool:
 	for location: Dictionary in Data.LOCATIONS:
@@ -695,6 +1002,7 @@ func save_game() -> bool:
 		"health": health, "hunger": hunger, "energy": energy, "heat": heat,
 		"reputation": reputation, "minute": minute, "tutorial_step": tutorial_step,
 		"inventory": inventory, "contacts": contacts, "inbox": inbox, "meetings": meetings,
+		"introductions": introductions, "callbacks": callbacks, "street_npcs": street_npcs,
 		"status": status, "ending_reason": ending_reason, "missed_classes": missed_classes,
 		"vehicle_owned": vehicle_owned, "flower_quality": flower_quality, "dime_quality": dime_quality,
 		"total_sales": total_sales, "total_earned": total_earned, "classes_attended": classes_attended,
@@ -732,6 +1040,9 @@ func load_game(show_message: bool = true) -> bool:
 	contacts.assign(state["contacts"])
 	inbox.assign(state["inbox"])
 	meetings.assign(state["meetings"])
+	introductions.assign(state.get("introductions", []))
+	callbacks.assign(state.get("callbacks", []))
+	street_npcs = state.get("street_npcs", {}).duplicate(true)
 	status = str(state["status"])
 	ending_reason = str(state.get("ending_reason", ""))
 	missed_classes = int(state["missed_classes"])
@@ -749,12 +1060,34 @@ func load_game(show_message: bool = true) -> bool:
 	player_location_id = str(state.get("player_location_id", "campus_quad"))
 	world_state = _sanitize_world_state(state.get("world_state", {}))
 	_migrate_contact_timing()
+	var moved_suppliers: int = _migrate_supplier_schedule()
 	paused = false
 	_low_food_warned = hunger < 20.0
-	_dirty = false
+	_dirty = moved_suppliers > 0
 	if show_message: _notify("Progress restored. Day %d, %s." % [day_number(), time_text()])
+	if show_message and moved_suppliers > 0: _notify("Your supplier moved the daytime pickup to the next night window. Check the updated day and time in your agenda.")
 	changed.emit()
 	return true
+
+func _migrate_supplier_schedule() -> int:
+	var moved_ids: Array[int] = []
+	for meeting: Dictionary in meetings:
+		if meeting["status"] != "scheduled" or meeting["type"] != "supplier": continue
+		var old_due: float = float(meeting["due_minute"])
+		var time_of_day: float = fmod(old_due, MINUTES_PER_DAY)
+		if time_of_day < 120.0 or time_of_day >= 1320.0: continue
+		# Expired commitments still expire normally; migration is not a free retry.
+		if minute > old_due + _meeting_grace(meeting): continue
+		meeting["status"] = "migrating"
+		meeting["due_minute"] = next_supplier_minute(maxf(old_due, minute + 60.0))
+		meeting["status"] = "scheduled"
+		moved_ids.append(int(meeting["id"]))
+	if not moved_ids.is_empty():
+		var retained: Array[Dictionary] = []
+		for actor: Dictionary in world_state.get("meeting_walks", []):
+			if not moved_ids.has(int(actor["id"])): retained.append(actor)
+		world_state["meeting_walks"] = retained
+	return moved_ids.size()
 
 func _migrate_contact_timing() -> void:
 	# Save v2 remains compatible: new saves persist the deadline, and older
@@ -806,14 +1139,53 @@ func _validate_save(state: Dictionary) -> bool:
 		if not _numeric_range(contact["sales"], 0.0, 10000000.0) or not _numeric_range(contact["last_sale_minute"], -1.0, 144000000.0): return false
 		if contact.has("next_request_minute") and not _numeric_range(contact["next_request_minute"], 0.0, 144000000.0): return false
 		if contact.has("last_order_quantity") and not _numeric_range(contact["last_order_quantity"], 1.0, 99.0): return false
+		for field: String in ["next_outreach_minute", "last_text_minute"]:
+			if contact.has(field) and not _numeric_range(contact[field], -1.0 if field == "last_text_minute" else 0.0, 144000000.0): return false
+		for field: String in ["blocked", "_informant", "_sting_triggered"]:
+			if contact.has(field) and not contact[field] is bool: return false
+		if contact.has("last_reply") and not contact["last_reply"] is String: return false
 	for message: Dictionary in state["inbox"]:
 		if not _has_keys(message, ["id", "contact_id", "contact_name", "quantity", "text", "status", "created_minute", "expires_minute", "suggested_price"]): return false
 		if not _numeric_range(message["quantity"], 1.0, 99.0) or not _numeric_range(message["expires_minute"], 0.0, 144000000.0): return false
+		if message.has("max_price") and not _numeric_range(message["max_price"], 12.0, 40.0): return false
+		if message.has("type") and str(message["type"]) not in ["client", "supplier_callback"]: return false
+		if message.get("type", "") == "supplier_callback":
+			if not _numeric_range(message.get("tier"), 0.0, 2.0) or not _numeric_range(message.get("bundles"), 1.0, 12.0): return false
 	for meeting: Dictionary in state["meetings"]:
 		if not _has_keys(meeting, ["id", "type", "contact_id", "contact_name", "location_id", "due_minute", "quantity", "price", "cost", "tier", "quality", "status", "created_minute"]): return false
 		if str(meeting["type"]) not in ["client", "supplier"] or not _valid_location(str(meeting["location_id"])): return false
 		if not _numeric_range(meeting["quantity"], 1.0, 99.0) or not _numeric_range(meeting["due_minute"], 0.0, 144000000.0): return false
 		if not _numeric_range(meeting["price"], 0.0, 1000.0) or not _numeric_range(meeting["cost"], 0.0, 100000.0): return false
+	return _validate_social_save(state)
+
+func _validate_social_save(state: Dictionary) -> bool:
+	var intro_data: Variant = state.get("introductions", [])
+	var callback_data: Variant = state.get("callbacks", [])
+	var street_data: Variant = state.get("street_npcs", {})
+	if not intro_data is Array or intro_data.size() > 128: return false
+	if not callback_data is Array or callback_data.size() > 80: return false
+	if not street_data is Dictionary or street_data.size() > 128: return false
+	for entry: Variant in intro_data:
+		if not entry is Dictionary or not _has_keys(entry, ["id", "name", "referrer_id", "referrer_name", "status", "created_minute", "text", "who_answer", "connection_answer", "_informant", "_cover_course", "_cover_hangout"]): return false
+		if not _numeric_range(entry["id"], 1.0, 100000000.0) or not _numeric_range(entry["created_minute"], 0.0, 144000000.0): return false
+		if entry["status"] not in ["pending", "accepted", "declined", "blocked"] or not entry["_informant"] is bool: return false
+		for field: String in ["name", "referrer_id", "referrer_name", "text", "who_answer", "connection_answer", "_cover_course", "_cover_hangout"]:
+			if not entry[field] is String or entry[field].length() > 1000: return false
+	for callback: Variant in callback_data:
+		if not callback is Dictionary or not _has_keys(callback, ["id", "kind", "contact_id", "contact_name", "due_minute", "tier", "bundles", "status"]): return false
+		if callback["kind"] not in ["client", "supplier"] or callback["status"] not in ["pending", "delivered", "cancelled"]: return false
+		if not callback["contact_id"] is String or not callback["contact_name"] is String: return false
+		if not _numeric_range(callback["id"], 1.0, 100000000.0) or not _numeric_range(callback["due_minute"], 0.0, 144000000.0): return false
+		if not _numeric_range(callback["tier"], -1.0, 2.0) or not _numeric_range(callback["bundles"], 1.0, 99.0): return false
+		if callback["kind"] == "supplier" and int(callback["tier"]) < 0: return false
+	for npc_id: Variant in street_data:
+		if not npc_id is String or npc_id.is_empty() or npc_id.length() > 80: return false
+		var npc: Variant = street_data[npc_id]
+		if not npc is Dictionary or not _has_keys(npc, ["name", "response", "status", "next_offer_minute", "last_sale_minute", "sales", "contact_id", "text"]): return false
+		if npc["response"] not in ["sale", "refusal", "report"] or npc["status"] not in ["idle", "sold", "reporting", "reported"]: return false
+		if not npc["name"] is String or not npc["contact_id"] is String or not npc["text"] is String: return false
+		if not _numeric_range(npc["next_offer_minute"], 0.0, 144000000.0) or not _numeric_range(npc["last_sale_minute"], -1.0, 144000000.0): return false
+		if not _numeric_range(npc["sales"], 0.0, 1000000.0): return false
 	return true
 
 func _has_keys(value: Dictionary, keys: Array) -> bool:
@@ -845,6 +1217,23 @@ func _sanitize_world_state(value: Variant) -> Dictionary:
 	if _numeric_range(value.get("car_rotation",0.0),-10000.0,10000.0): result["car_rotation"] = float(value.get("car_rotation",0.0))
 	result["pursuit_state"] = _sanitize_pursuit_state(value.get("pursuit_state",{}))
 	result["meeting_walks"] = _sanitize_meeting_walks(value.get("meeting_walks",[]))
+	result["informant_runs"] = _sanitize_informant_runs(value.get("informant_runs",[]))
+	return result
+
+func _sanitize_informant_runs(value: Variant) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if not value is Array or value.size() > 42: return result
+	var seen: Dictionary = {}
+	for entry: Variant in value:
+		if not entry is Dictionary or not entry.get("id") is String: continue
+		var npc_id: String = entry["id"]
+		if npc_id.length() != 10 or not npc_id.begins_with("citizen_") or not npc_id.substr(8).is_valid_int(): continue
+		var number: int = npc_id.substr(8).to_int()
+		if number < 0 or number >= 42 or npc_id != "citizen_%02d" % number or seen.has(npc_id): continue
+		if not _valid_saved_position(entry.get("position", []), "") or not _valid_saved_position(entry.get("report_position", []), ""): continue
+		if not entry.get("campus") is bool: continue
+		seen[npc_id] = true
+		result.append({"id": npc_id, "position": entry["position"].duplicate(), "report_position": entry["report_position"].duplicate(), "campus": entry["campus"]})
 	return result
 
 func _sanitize_meeting_walks(value: Variant) -> Array[Dictionary]:

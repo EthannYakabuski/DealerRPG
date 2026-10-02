@@ -123,6 +123,9 @@ func _run() -> void:
 		officer.node.position=Vector3(140,0.3,110)
 	var prior_relationship:float=game.contacts[0].relationship
 	scene.interact()
+	await _settle()
+	_check(meeting.status=="scheduled","Physical arrival offers review before the handoff")
+	await _press("COMPLETE HANDOFF")
 	_check(meeting.status=="completed","Scheduled client handoff works in world")
 	_check(float(game.contacts[0].relationship)>=prior_relationship+7.0,"Early arrival earns the full fair punctual relationship reward")
 	_check(game.total_sales==2,"Tutorial and client sales counted once")

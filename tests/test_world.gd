@@ -14,6 +14,26 @@ func _run() -> void:
 		for rect in world.obstacle_rects:
 			if rect.grow(0.6).has_point(Vector2(pos.x,pos.z)):
 				failures.append("Landmark %s blocked at %s" % [id,str(pos)])
+	# The authored marker must sit on the native model's door side with a clear
+	# approach, not merely somewhere outside its rectangular footprint.
+	for id: String in world.building_entrances:
+		var entry: Dictionary = world.building_entrances[id]
+		var approach: Vector3 = entry.marker-entry.door
+		approach.y = 0.0
+		if approach.length()<2.0 or approach.length()>6.0 or approach.normalized().dot(entry.outward)<0.98:
+			failures.append("Entrance %s is not aligned directly outside its model door"%id)
+		var threshold: Vector3 = entry.door+entry.outward*1.5
+		for step in range(11):
+			var at: Vector3 = entry.marker.lerp(threshold,float(step)/10.0)
+			for rect: Rect2 in world.obstacle_rects:
+				if rect.grow(0.2).has_point(Vector2(at.x,at.z)):
+					failures.append("Entrance %s approach crosses another wall"%id)
+		if world.walkable_surface_height(entry.marker)<0.04:
+			failures.append("Entrance %s lacks a paved approach"%id)
+	if world.building_entrances.size()!=8:
+		failures.append("Door audit must cover five enterable buildings, dealership, service yard, and residence")
+	if world.get_district(world.get_landmark("supplier"))!="College Square":
+		failures.append("Service yard uses the wrong police jurisdiction")
 	var road_conflicts: Dictionary = {}
 	for r in world.map_roads.size():
 		var points: PackedVector3Array = world.map_roads[r]

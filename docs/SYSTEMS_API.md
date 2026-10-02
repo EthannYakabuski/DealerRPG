@@ -15,6 +15,8 @@ Signals:
 - `ended(won: bool, reason: String)` — terminal campaign result.
 - `crime_committed(severity: float)` — world witnesses decide whether to pursue. Minor handoff ~14, supplier setup 65, gunfire 65. Ordinary hidden crimes add small passive attention; this signal is **not** an automatic capture.
 - `feedback_event(kind: String, value: float)` — success-only sound and visual cues. Kinds: `pack`, `purchase`, `sale`, `text`, `caught`, `consume`, `tuition`, `class`, `party`. Transaction values are signed cash changes (party reports net proceeds after supplies); other values are zero. Loading a save and failed transactions never replay these cues.
+- `civilian_reaction(npc_id: String, reaction: String)` — a pedestrian's `report` reaction asks the world to start their physical walk toward an officer. This signal does not increase heat or cause an arrest.
+- `police_tip(location_id: String, severity: float)` — a supplier setup or informant handoff provides a meeting location for an actual patrol response. The state warns the player and leaves pursuit, arrival and capture to the world.
 
 Call `set_heat(value)` for police attention, `take_damage(amount)` for injuries, and `caught_by_police()` for terminal arrest. `finish_game(won, reason)` is also available. An ended campaign rejects new transactions and persists its result; restarting resets everything.
 
@@ -32,7 +34,7 @@ Milo's first follow-up arrives 90 game minutes after the tutorial purchase. Subs
 
 ## Meetings and suppliers
 
-`schedule_meeting(message_id, location_id, delay_minutes = 90, price = 22) -> bool` accepts one request. Delay is 30–240 minutes and price is $12–$40 per bag. `available_locations()` returns location dictionaries with `id`, `name`, `district`. The system rejects class conflicts, duplicate requests and overlapping meetings.
+`schedule_meeting(message_id, location_id, delay_minutes = 90, price = 22) -> bool` accepts one request. Delay is 30–480 minutes and price is $12–$40 per bag, capped at `message.max_price` for discounted offers. `available_locations()` returns location dictionaries with `id`, `name`, `district`. The system rejects class conflicts across midnight, duplicate requests and overlapping meetings.
 
 `active_meetings()` returns scheduled meetings sorted by due time. Every meeting includes:
 
@@ -43,11 +45,23 @@ Milo's first follow-up arrives 90 game minutes after the tutorial purchase. Subs
 | `location_id`, `due_minute` | Physical place and absolute arrival time |
 | `quantity`, `price`, `cost` | Bags and per-bag price for clients; bundles, per-bundle price and total cost for suppliers |
 | `tier`, `quality`, `risk` | Supplier metadata; clients have tier -1, quality 0 and no risk field |
-| `status`, `created_minute` | `scheduled`, `completed`, `missed` or `cancelled` |
+| `status`, `created_minute` | `scheduled`, `completed`, `missed`, `postponed` or `cancelled` |
 
 `complete_meeting(meeting_id) -> bool` checks status, location, stock/cash/capacity, and arrival window. NPCs can trade **12 minutes before** due time (`MEETING_ARRIVAL_MINUTES`), and wait **25–45 minutes after** based on relationship (`MEETING_WINDOW` plus relationship grace). `cancel_meeting(meeting_id)` applies a smaller relationship penalty than a no-show. Failed stock/location/time checks do not consume anything. Repeated handoffs cannot duplicate rewards.
 
-`supplier_catalog()` returns three suppliers. `supplier_order(tier, bundles)` creates a meeting at `car_park` at least 60 minutes away. Cash is charged and bundles arrive only on handoff. Reputation gates are 0 / 8 / 22, prices are $46 / $40 / $33 per bundle, qualities are 0.72 / 0.87 / 0.98. Each bundle splits into six bags; quality averages when stocks mix. Supplier risk is exposed in the meeting; a rolled setup emits severity 65 with a warning, giving the world a chance to pursue rather than instantly ending the run.
+`supplier_catalog()` returns three suppliers. `next_supplier_minute(earliest = -1)` previews the next free night slot at least 60 minutes away, between 22:00 inclusive and 02:00 exclusive. `supplier_order(tier, bundles)` creates that meeting at `car_park`, preserving 35-minute gaps and the absolute day across midnight. Cash is charged and bundles arrive only on a handoff during the night window. Reputation gates are 0 / 8 / 22, prices are $46 / $40 / $33 per bundle, qualities are 0.72 / 0.87 / 0.98. Each bundle splits into six bags; quality averages when stocks mix. A supplier setup emits a warning and a severity-65 physical police tip rather than ending the run.
+
+`postpone_meeting(id, delay_minutes = 120)` is for a conversation at the real meeting: main must first verify NPC proximity. State also checks the meeting location and arrival window. It removes the accepted obligation without a relationship penalty and queues a callback after at least two hours. A client callback stays within 07:00–23:00; a supplier callback moves to an appropriate night window. `request_tomorrow(message_id)` defers an incoming client opportunity until at least 09:00 the next day. Both persist, prevent duplicates, and produce a new opportunity requiring explicit scheduling, never an automatic appointment. Supplier callback messages retain normal inbox fields plus `type: supplier_callback`, `tier` and `bundles`; `accept_supplier_callback(message_id)` atomically schedules a fresh night pickup and consumes the callback.
+
+## Conversations and introductions
+
+`street_conversation(npc_id, npc_name)` creates or reads a stable pedestrian record and returns only public fields: `npc_id`, `name`, `text`, `can_offer`, `can_add_contact`, `sold`, `price`, `contact_id`. Root/world owns the physical conversation range. `offer_street_sale(npc_id)` can sell one bag for $22, receive a refusal, or emit a reporting reaction. Outcomes persist and cannot be rerolled by reopening the dialog. Successful sales apply a purchase cooldown; refusals impose four hours before another offer. `add_street_contact(npc_id)` works once after a successful sale and carries that sale's cooldown into the phone contact.
+
+`pending_civilian_reports()` lists pedestrians still looking for an officer. Restore their physical journeys when continuing a game. When one reaches a living officer, the world calls `civilian_report_arrived(npc_id)` once and handles the ensuing pursuit itself. State only records completion, so there is no duplicate crime alert or immediate arrest.
+
+Referrals first appear in `pending_introductions()`, a public array containing `id`, `name`, `text`, `referrer_id`, `referrer_name`, `who_answer`, `connection_answer` and `status`. `ask_introduction(id, "referrer")` asks who gave out the number; `ask_introduction(id, "connection")` asks how they know that person. Compare the saved answers to `contact_profile(contact_id)`, which provides known `course`, `hangout` and `bio`. `resolve_introduction(id, "accept" | "decline" | "block")` makes the player's decision explicit. Acceptance adds a contact and an incoming opportunity; it does not schedule anything. Some informants have inconsistent cover and some have accurate cover, so questions provide clues rather than an infallible identity check. Hidden identity fields are omitted from public introduction/profile views. A hidden informant only sends a police tip after an actual chosen handoff.
+
+`text_contact(contact_id)` proactively asks an existing contact about interest, limited to one outreach every four hours and no duplicate pending business. A customer needs at least three hours since purchase plus thirty minutes per extra bag before considering another offer. Eligible customers have 20–30% interest depending on relationship; some ask for one bag at a discounted $20 maximum. A declined offer leaves the automatic 6–8-hour request cooldown untouched. `contact.last_reply` / `last_text_minute` persist for conversation display; `contact_profile` includes them too.
 
 ## Other actions
 
@@ -73,6 +87,10 @@ All transaction methods return a success bool. Failed actions emit a notificatio
 
 Optional `world_state.meeting_walks` validates up to ten client/supplier actor records. The world captures approaching and waiting actors for active appointments; completed departures are cosmetic and are not restored. Each record contains numeric `id`, exterior `position` and `target` arrays, `state`, and absolute `start_minute` / `due` times. Invalid entries and duplicate IDs are skipped independently; oversized or malformed containers are ignored. Missing data remains compatible with earlier saves.
 
+Optional `world_state.informant_runs` retains up to 42 reporting pedestrians as `{id, position, report_position, campus}`. IDs must be `citizen_00` through `citizen_41`; both positions must be finite and inside the exterior. Malformed or duplicate entries are skipped. New optional top-level `introductions`, `callbacks` and `street_npcs` are validated before a save is applied; older version-2 saves without them remain compatible.
+
+Existing daytime supplier appointments that are still live migrate to the next legal night slot without changing cash or stock. Only that supplier's obsolete saved walking record is removed; unrelated actors remain intact. Already-overdue appointments retain ordinary expiry behavior, and the load notification points the player to the updated agenda.
+
 Run the integration suite with Godot 4.5.1:
 
 ```powershell
@@ -80,5 +98,7 @@ Run the integration suite with Godot 4.5.1:
 ```
 
 The suite checks tutorial ordering, scheduling, relationship penalties, inventory/quality, suppliers, hunger, classes, parties, cars, corrupted saves, irreversible loss, restart and a complete earned-money campaign. It uses a separate `.godot/gameplay-test-save.json`, never the player's save. For sandboxed desktop runs use an absolute forward-slash log path under the repository; Godot's default AppData log location may not be writable.
+
+`tests/test_social_state.gd` covers pedestrian sale/refusal/report branches, persistent reports, referral vetting and informant handoffs, proactive discounted opportunities, night-only suppliers, client/supplier/tomorrow callbacks, eight-hour scheduling, duplicate prevention and optional-save compatibility. Its isolated save is `.godot/social-test-save.json`.
 
 `tests/test_population.gd` instantiates the actual city, actors, collisions and navigation. It checks tutorial spawn spacing, animated models, day/night goals, building avoidance, first-sale witnesses, line-of-sight occlusion, patrol jurisdiction, persisted arrest, escape, reset, all five interiors, stamina, firearm visibility/ammunition, melee reactions, car theft/safe exits/ownership, timed NPC arrival and physical save positions. `CityPopulation.reset_population()` resets transient city simulation for a new or restored campaign; `StudentPlayer.reset_travel()` clears stale movement and vehicle state.

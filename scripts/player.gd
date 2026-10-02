@@ -31,6 +31,8 @@ var last_attack_kind := ""
 var _grounded_position := Vector3.INF
 var _grounded_heading := INF
 var _grounded_board := false
+var impact_cooldown := 0.0
+var impact_velocity := Vector3.ZERO
 
 func _ready() -> void:
 	name = "Player"
@@ -75,6 +77,7 @@ func _physics_process(delta: float) -> void:
 		_update_grounding()
 		return
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
+	impact_cooldown = maxf(0.0, impact_cooldown - delta)
 	if position.distance_squared_to(last_position) > 1600.0:
 		velocity = Vector3.ZERO
 		last_safe_position = position
@@ -126,6 +129,10 @@ func _physics_process(delta: float) -> void:
 		acceleration = 10.0 if direction.length_squared() > 0.01 else 16.0
 	velocity.x = move_toward(velocity.x, direction.x * speed, acceleration * delta)
 	velocity.z = move_toward(velocity.z, direction.z * speed, acceleration * delta)
+	if impact_velocity.length_squared() > 0.01:
+		velocity.x = impact_velocity.x
+		velocity.z = impact_velocity.z
+		impact_velocity = impact_velocity.move_toward(Vector3.ZERO,delta*18.0)
 	if not is_on_floor():
 		velocity.y -= 20 * delta
 	else:
@@ -222,6 +229,8 @@ func reset_travel() -> void:
 	skateboarding = false
 	exhausted = false
 	attack_cooldown = 0.0
+	impact_cooldown = 0.0
+	impact_velocity = Vector3.ZERO
 	last_attack_kind = ""
 	velocity = Vector3.ZERO
 	blocked = false
@@ -238,6 +247,26 @@ func reset_travel() -> void:
 	if weapon:
 		weapon.visible = false
 	mode_changed.emit()
+
+func receive_vehicle_impact(car_velocity: Vector3, source: Node3D) -> bool:
+	if blocked or Game.paused or Game.status != "playing" or impact_cooldown > 0.0:
+		return false
+	if not is_instance_valid(source) or source == vehicle or position.x > 400.0:
+		return false
+	var speed := Vector2(car_velocity.x,car_velocity.z).length()
+	if not is_finite(speed) or speed < 2.0: return false
+	impact_cooldown = 1.6
+	var driving := is_instance_valid(vehicle)
+	var damage := clampf(speed*2.6,8.0,44.0)*(0.35 if driving else 1.0)
+	skateboarding = false
+	impact_velocity = Vector3(car_velocity.x,0,car_velocity.z).normalized()*clampf(speed*0.7,3.0,9.0)
+	if driving: impact_velocity *= 0.35
+	velocity += impact_velocity
+	Game.take_damage(damage)
+	Game.feedback_event.emit("impact",damage)
+	Game.notification.emit("Traffic collision! -%d health. Watch the road." % int(ceil(damage)))
+	mode_changed.emit()
+	return true
 
 func travel_mode() -> String:
 	if vehicle:

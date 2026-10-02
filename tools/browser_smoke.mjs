@@ -151,6 +151,32 @@ try {
       await pause(Math.min(2000, Math.max(30, Number(option('hold', 80)))));
       await send('Input.dispatchKeyEvent', { type: 'keyUp', ...fields });
       await pause(400);
+    } else if (action === 'pad') {
+      // Exercise Godot's exported Gamepad API path without requiring a physical
+      // controller on the runner. This applies only to this isolated QA tab.
+      const button = Number(option('button', -1));
+      const axis = Number(option('axis', -1));
+      const value = Number(option('value', 1));
+      const hold = Math.min(2000, Math.max(60, Number(option('hold', 140))));
+      if (!Number.isInteger(button) || button < -1 || button > 16 || !Number.isInteger(axis) || axis < -1 || axis > 3 || !Number.isFinite(value) || Math.abs(value) > 1) throw new Error('Pad expects a standard button 0–16 or axis 0–3 and value -1 to 1.');
+      const result = await send('Runtime.evaluate', { expression: `(() => {
+        if (!window.__nightSchoolQaPad) {
+          const pad = { id: 'QA Standard Gamepad', index: 0, connected: true, mapping: 'standard', axes: [0,0,0,0], buttons: Array.from({length:17},()=>({pressed:false,touched:false,value:0})) };
+          window.__nightSchoolQaPad = pad;
+          Object.defineProperty(navigator, 'getGamepads', { configurable:true, value:()=>[pad] });
+          const event = new Event('gamepadconnected');
+          Object.defineProperty(event,'gamepad',{value:pad});
+          window.dispatchEvent(event);
+        }
+        const pad = window.__nightSchoolQaPad;
+        if (${button} >= 0) pad.buttons[${button}] = {pressed:true,touched:true,value:1};
+        if (${axis} >= 0) pad.axes[${axis}] = ${value};
+        return true;
+      })()`, returnByValue:true });
+      if (result.exceptionDetails) throw new Error('Virtual gamepad could not be connected.');
+      await pause(hold);
+      await send('Runtime.evaluate', { expression: 'window.__nightSchoolQaPad.buttons.forEach(b=>{b.pressed=false;b.touched=false;b.value=0}); window.__nightSchoolQaPad.axes.fill(0);' });
+      await pause(400);
     } else if (action === 'benchmark') {
       const measurement = await send('Runtime.evaluate', {
         expression: `new Promise(resolve => {

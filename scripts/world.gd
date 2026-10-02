@@ -19,6 +19,7 @@ const HOME := Color("c4aed8")
 const SURFACE_CELL := 8.0
 
 var landmarks: Dictionary = {}
+var building_entrances: Dictionary = {}
 var spawn_position := Vector3(20.0, 0.2, 50.0)
 var obstacle_rects: Array[Rect2] = []
 var map_buildings: Array[Rect2] = []
@@ -65,6 +66,7 @@ func _ready() -> void:
 	_create_streetscape()
 	_create_routes()
 	_create_interiors()
+	_bind_building_entrances()
 	_create_markers()
 	_index_ground_primitives()
 	for cell: Vector2i in _surface_cells:
@@ -75,17 +77,39 @@ func _ready() -> void:
 
 func _create_landmarks() -> void:
 	_landmark("campus_quad", "Campus quad", 20, 49, "meet", "Campus")
-	_landmark("classroom", "Lecture hall", 32, 39, "class", "Campus", "classroom")
-	_landmark("library", "Learning commons", -18, 65, "tuition", "Campus", "library")
-	_landmark("cafe", "Night Owl café", -63, -14, "food", "College Square", "cafe")
-	_landmark("market", "Corner market", -84, -36, "market", "College Square", "market")
-	_landmark("home", "Deerfield apartment", 78, -59, "home", "Deerfield", "home")
+	_landmark("classroom", "Lecture hall", 19, 39, "class", "Campus", "classroom")
+	_landmark("library", "Learning commons", -20, 65, "tuition", "Campus", "library")
+	_landmark("cafe", "Night Owl café", -67.2, -16, "food", "College Square", "cafe")
+	_landmark("market", "Corner market", -86.8, -37, "market", "College Square", "market")
+	_landmark("home", "Deerfield apartment", 90.3, -59, "home", "Deerfield", "home")
 	_landmark("car_park", "West campus parking", -82, 47, "meet", "Campus")
-	_landmark("supplier", "Service yard", -95, 77, "supplier", "College Square")
-	_landmark("auto_dealer", "Second Hand Motors", -109, -4, "vehicle", "College Square")
+	_landmark("supplier", "Service yard", -85.5, 96, "supplier", "College Square")
+	_landmark("auto_dealer", "Second Hand Motors", -119, -16, "vehicle", "College Square")
 	_landmark("skate_park", "Deerfield skate spot", 116, 8, "meet", "Deerfield")
 	_landmark("bus_stop", "Baseline transit", -30, -82, "meet", "College Square")
-	_landmark("residence", "Student residence", 83, 57, "meet", "Campus")
+	_landmark("residence", "Student residence", 76, 53, "meet", "Campus")
+
+func _bind_building_entrances() -> void:
+	# Authored against native GLB doors, not a universal assumption that +Z is
+	# the front. Commercial c/e/k face -Z; b opens on -X; j has two entrances.
+	var entries := {
+		"cafe":[Vector3(-67.2,0,-11.8),Vector3.FORWARD,"Commercial_City/building-c"],
+		"market":[Vector3(-86.8,0,-33),Vector3.FORWARD,"Commercial_City/building-e"],
+		"classroom":[Vector3(19,0,34.2),Vector3.BACK,"Commercial_City/building-j"],
+		"library":[Vector3(-20,0,69.4),Vector3.FORWARD,"Commercial_City/building-k"],
+		"home":[Vector3(90.3,0,-62.8),Vector3.BACK,"Suburban_City/building-type-n"],
+		"auto_dealer":[Vector3(-115.7,0,-16),Vector3.LEFT,"Commercial_City/building-b"],
+		"supplier":[Vector3(-85.5,0,92.2),Vector3.BACK,"Industrial_City/building-g"],
+		"residence":[Vector3(76,0,47.2),Vector3.BACK,"Commercial_City/building-e"]
+	}
+	for id: String in entries:
+		var data: Array = entries[id]
+		building_entrances[id] = {"door":data[0],"outward":data[1],"asset":data[2],"marker":landmarks[id].position}
+		var door: Vector3 = data[0]
+		var marker: Vector3 = landmarks[id].position
+		_path([Vector2(door.x,door.z),Vector2(marker.x,marker.z)],2.4)
+	_path([Vector2(-119,-16),Vector2(-128,-16)],2.4)
+	_path([Vector2(-85.5,96),Vector2(-96,96),Vector2(-96,80)],2.4)
 
 func _landmark(id: String, title: String, x: float, z: float, kind: String, district: String, interior_id: String = "") -> void:
 	landmarks[id] = {"name": title, "position": Vector3(x, 0.17, z), "type": kind, "district": district, "interior": interior_id}
@@ -98,7 +122,7 @@ func get_district(at: Vector3) -> String:
 		return str(landmarks.get(current_interior, {"district": "Campus"}).district)
 	if at.z < -15.0 and at.x > 31.0:
 		return "Deerfield"
-	if at.x < -29.0 and at.z < 28.0:
+	if (at.x < -29.0 and at.z < 28.0) or (at.x < -79.0 and at.z>68.0):
 		return "College Square"
 	return "Campus"
 
@@ -311,10 +335,10 @@ func walkable_support_height(at: Vector3, radius: float) -> float:
 func _create_commercial() -> void:
 	# The aerial's broad low-rise retail/parking blocks stay in the northwest.
 	_parking(Vector3(-90.5,0,-54),Vector2(31,22),0.0,4)
-	_building("Commercial_City/building-e",Vector3(-90,0,-27),Vector3(26,9.4,14),PI,"COLLEGE SQUARE / MARKET",SHOP)
+	_building("Commercial_City/building-e",Vector3(-90,0,-27),Vector3(26,9.4,14),0.0,"COLLEGE SQUARE / MARKET",SHOP)
 	_building("Commercial_City/building-k",Vector3(-62,0,-56),Vector3(20,12.5,12),0.0,"SQUARE WEST",SHOP)
 	_building("Industrial_City/building-a",Vector3(-33,0,-60),Vector3(22,11,18),0.0,"HARDWARE & HOME",Color("dc9866"))
-	_building("Commercial_City/building-c",Vector3(-64,0,-6),Vector3(16,8.5,13),PI,"NIGHT OWL",SHOP)
+	_building("Commercial_City/building-c",Vector3(-64,0,-6),Vector3(16,8.5,13),0.0,"NIGHT OWL",SHOP)
 	_building("Commercial_City/building-b",Vector3(-111,0,-15),Vector3(10,11,12),0.0,"MOTORS",SHOP)
 	_building("Commercial_City/building-a",Vector3(-112,0,-40),Vector3(8.0,10.5,11),0.0,"NORTHSIDE",SHOP)
 	_building("Industrial_City/building-g",Vector3(-87,0,86),Vector3(13,7,13),0.0,"MAINTENANCE",Color("959d98"))
@@ -342,10 +366,10 @@ func _create_commercial() -> void:
 func _create_campus() -> void:
 	# Low connected teaching blocks echo the aerial's large south/east campus.
 	_building("Commercial_City/building-j",Vector3(19,0,27),Vector3(26,12.2,17),0,"NORTH HALL",CAMPUS)
-	_building("Commercial_City/building-k",Vector3(-20,0,77),Vector3(26,11.3,17),PI,"LEARNING COMMONS",CAMPUS)
+	_building("Commercial_City/building-k",Vector3(-20,0,77),Vector3(26,11.3,17),0.0,"LEARNING COMMONS",CAMPUS)
 	_building("Industrial_City/building-b",Vector3(-38,0,31),Vector3(25,11,16),0,"DESIGN + TECHNOLOGY",CAMPUS)
 	_building("Commercial_City/building-j",Vector3(12,0,86),Vector3(24,11,13),PI,"STUDENT SERVICES",CAMPUS)
-	_building("Commercial_City/building-e",Vector3(79,0,41),Vector3(26,9.5,15),0,"RESIDENCE / EAST",CAMPUS)
+	_building("Commercial_City/building-e",Vector3(79,0,41),Vector3(26,9.5,15),PI,"RESIDENCE / EAST",CAMPUS)
 	_building("Commercial_City/building-i",Vector3(106,0,44),Vector3(17,13,16),PI,"ATHLETICS",CAMPUS)
 	_building("Industrial_City/building-c",Vector3(112,0,-1),Vector3(24,8.5,16),0,"FIELD HOUSE",CAMPUS)
 	_building("Commercial_City/building-j",Vector3(-69,0,88),Vector3(20,10,15),PI,"INNOVATION LAB",CAMPUS)
@@ -381,7 +405,7 @@ func _create_residential() -> void:
 		[Vector3(62,0,-85),"b",PI], [Vector3(83,0,-88),"d",PI],
 		[Vector3(106,0,-73),"f",-PI/2], [Vector3(108,0,-43),"h",-PI/2],
 		[Vector3(86,0,-43),"e",0.0], [Vector3(72,0,-41),"c",0.0],
-		[Vector3(66,0,-64),"a",PI/2], [Vector3(89,0,-68),"n",0.0],
+		[Vector3(66,0,-64),"a",PI/2], [Vector3(89,0,-68),"n",PI],
 		[Vector3(28,0,-69),"g",PI/2], [Vector3(27,0,-54),"i",PI/2],
 		[Vector3(40,0,-20),"l",0.0], [Vector3(78,0,-9),"j",0.0]
 	]
@@ -398,7 +422,7 @@ func _create_residential() -> void:
 		_batch.box(doorstep+Vector3.UP*0.065,Vector3(2.3,0.10,5.0),WALK,item[2])
 		_asset("Suburban_City/planter",doorstep+Vector3(2.5,0,0),Vector3(1.7,0.8,1.1),item[2])
 	# Apartment front entrance reaches the central pedestrian spine directly.
-	_path([Vector2(89,-59),Vector2(78,-59)],2.6)
+	_path([Vector2(90.3,-63),Vector2(90.3,-59),Vector2(78,-59)],2.6)
 	_sign("DEERFIELD / RESIDENCES",Vector3(52,0,-83),HOME)
 	# Shared courtyard with picnic/social areas, hedges, and autumn street trees.
 	for pos in [Vector3(81,0,-79),Vector3(77,0,-45),Vector3(98,0,-84),Vector3(38,0,-51),Vector3(110,0,-97)]:
@@ -507,9 +531,14 @@ func _building(key: String, pos: Vector3, size: Vector3, angle: float, title: St
 	_collision(exterior,pos+Vector3.UP*size.y*0.5,Vector3(footprint.x*0.90,size.y,footprint.y*0.90))
 	_batch.box(pos+Vector3.UP*0.045,Vector3(footprint.x+1.1,0.09,footprint.y+1.1),Color("9c9b8e"))
 	if title != "":
-		var front := Vector3(sin(angle),0,cos(angle))
-		var sign_pos := pos+front*(size.z*0.5+0.12)+Vector3.UP*3.3
-		_batch.box(sign_pos,Vector3(minf(size.x*0.76,15.0),1.15,0.12),INK,angle)
+		var local_front := Vector3.BACK
+		if key in ["Commercial_City/building-c","Commercial_City/building-e","Commercial_City/building-k"]: local_front = Vector3.FORWARD
+		elif key=="Commercial_City/building-b": local_front = Vector3.LEFT
+		var front := Basis(Vector3.UP,angle)*local_front
+		var sign_angle := atan2(front.x,front.z)
+		var extent := size.x*0.5 if absf(local_front.x)>0.5 else size.z*0.5
+		var sign_pos := pos+front*(extent+0.12)+Vector3.UP*3.3
+		_batch.box(sign_pos,Vector3(minf(size.x*0.76,15.0),1.15,0.12),INK,sign_angle)
 		var label := Label3D.new()
 		label.text = title
 		label.font_size = 42
@@ -517,7 +546,7 @@ func _building(key: String, pos: Vector3, size: Vector3, angle: float, title: St
 		label.modulate = accent
 		label.outline_size = 0
 		label.position = sign_pos+front*0.09
-		label.rotation.y = angle
+		label.rotation.y = sign_angle
 		label.no_depth_test = false
 		label.visibility_range_end = 90
 		exterior.add_child(label)

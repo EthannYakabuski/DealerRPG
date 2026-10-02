@@ -69,6 +69,10 @@ def generate(kind: str, duration: float, seed: int) -> None:
                      + tone(t, .17, .67, 155.56, .18, 3, .2))
             if t < .05:
                 value += filtered * .3 * (1 - t / .05)
+        elif kind == "impact":
+            value = tone(t, 0., .34, 78, .45, 6, .2)
+            if t < .33:
+                value += (filtered * .45 + noise * .08) * math.exp(-t * 11)
         elif kind == "consume":
             value = tone(t, .16, .36, 523, .16, 4)
             if t < .14:
@@ -99,7 +103,7 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     durations = {"pack": .64, "sale": .65, "purchase": .45, "text": .52,
                  "detected": .63, "caught": .92, "consume": .58,
-                 "tuition": .95, "class": .84, "party": .85}
+                 "tuition": .95, "class": .84, "party": .85, "impact": .42}
     for seed, (kind, duration) in enumerate(durations.items(), start=801):
         generate(kind, duration, seed)
 

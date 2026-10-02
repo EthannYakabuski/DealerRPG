@@ -43,6 +43,9 @@ func _run() -> void:
 	root.add_child(scene)
 	await _settle()
 	scene.start_game(false)
+	# Evening keeps the new nocturnal supplier appointment earlier than the
+	# client fixture, while still exercising the actual first-message delay.
+	game.minute=1170.0
 	game.paused=true
 	scene.population.set_process(false)
 	scene.population.set_physics_process(false)

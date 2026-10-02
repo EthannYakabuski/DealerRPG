@@ -21,23 +21,43 @@ Use a desktop browser with WebGL 2 and WebAssembly support. The game uses a sing
 | Tab / P | Phone |
 | B / I | Backpack |
 | M | City map; click a landmark for directions |
+| G | Agenda and upcoming appointments |
 | V | Enter or exit a nearby vehicle |
 | J / K / L | Punch / kick / shoot |
 | Mouse wheel | Zoom |
 | Escape | Close menu / pause |
 
-Menus pause the clock. Clients walk to meetings about twelve game minutes early; close friends wait longer if you are late. Click the upcoming meeting card on the main HUD for directions. At a meeting location, the Agenda can skip ahead to thirty minutes before the appointment, leaving time to watch your contact walk in. Supplier pickups are physical meetings, not instant deliveries.
+Menus pause the clock. Clients walk to meetings about twelve game minutes early; close friends wait longer if you are late. Click the upcoming meeting card on the main HUD for directions. At a meeting location, the Agenda can skip ahead to thirty minutes before the appointment, leaving time to watch your contact walk in. Talk to the contact beside you to review the handoff or postpone it and receive a later callback. Supplier pickups are physical meetings between 10 p.m. and 2 a.m. Client appointments can be scheduled up to eight hours ahead; “hit me up tomorrow” defers the request to the following day.
+
+Controllers use standard Xbox-style button names (equivalent positions on other pads). Connect a controller and press a button after focusing the browser game.
+
+| Controller | Action |
+| --- | --- |
+| Left stick | Move; navigate menus |
+| A / B | Interact or confirm / close menu |
+| X / Y | Skateboard / enter or exit vehicle |
+| LT / RT | Sprint / punch |
+| LB / RB | Phone / backpack |
+| Select / Start | Map / pause |
+| D-pad up / right | Agenda / contacts |
+| D-pad left / down | Kick / shoot |
+| D-pad in menus | Move focus; adjust a selected numeric value with left/right |
+
+The phone supports controller selection, scrolling and scheduling. A opens a dropdown, directions select an option, and A confirms; B backs out. Menus display the control hints for the most recently used input device.
 
 Milo's first follow-up arrives about ninety game minutes after saving his number. After later sales, customers wait six to eight game hours, plus extra time for larger orders, before requesting more. Other contacts can still text during that interval.
 
 ## Systems
 
-- A guided opening sale, then an open phone-driven network of up to twelve contacts.
+- A guided opening sale, street conversations and an expanding phone network.
+- Ambient customers can buy and exchange numbers, refuse, or run to a nearby officer to report an offer.
+- Referral texts let you ask about the referrer and their shared history before accepting a new contact. Compare replies with known contact profiles; a coherent answer is a clue, never a guarantee.
+- Proactive offers to saved contacts, occasional requests for a discount, tomorrow replies and in-person postponements.
 - Relationships affected by punctuality, price, quality, cancellation and no-shows.
 - Three suppliers with different reputation gates, prices, stock quality and bust risk.
 - A finite backpack, food, energy, skateboard, late-game firearm/ammunition and owned car.
 - Campus security and city police with visibility-based detection, pursuit, escape and hardcore arrest.
-- Animated pedestrians, spaced social groups, daily destination changes, flowing road traffic, a roaming police cruiser and parked vehicles.
+- Animated pedestrians, spaced social groups, daily destination changes, flowing road traffic, a roaming police cruiser and parked vehicles. Moving traffic can injure you and knock you off your board.
 - Live meeting countdowns, clickable directions, transaction pop-ups and original sounds for packing, sales, purchases, texts and police events.
 - Vehicle theft, recognizable stolen cars, on-foot melee and ranged combat reactions.
 - Classes, paid campus shifts, sleep, evening parties, and incremental tuition payments.

@@ -34,6 +34,28 @@ func _run() -> void:
 	scene.ui._update_hud()
 	await create_timer(2.8).timeout
 	await _capture("meeting-late")
+	state.reputation=2
+	state._maybe_referral(state.contacts[0])
+	scene.ui.show_page("messages")
+	await _capture("referral-questions")
+	var introduction:Dictionary=state.pending_introductions()[0]
+	state.ask_introduction(int(introduction.id),"referrer")
+	state.ask_introduction(int(introduction.id),"connection")
+	await process_frame
+	await process_frame
+	for button in scene.ui.body.find_children("*","Button",true,false):
+		if button.text=="SAVE CONTACT": button.grab_focus()
+	await _capture("referral-answers")
+	scene.ui.show_page("contacts")
+	scene.ui.set_controller_active(true)
+	await _capture("contacts-controller")
+	scene.ui.show_page("suppliers")
+	await _capture("night-suppliers")
+	scene.ui.show_postpone_meeting(int(state.active_meetings()[0].id))
+	await _capture("in-person-choices")
+	var citizen:Dictionary=scene.population.citizens[0]
+	scene.ui.show_conversation(state.street_conversation(str(citizen.id),str(citizen.name)))
+	await _capture("street-conversation")
 	scene._release_audio(scene)
 	await create_timer(0.15).timeout
 	scene.queue_free()
@@ -42,6 +64,7 @@ func _run() -> void:
 	quit()
 
 func _capture(file:String) -> void:
+	await create_timer(0.3).timeout
 	await RenderingServer.frame_post_draw
 	var dir:String=ProjectSettings.globalize_path("res://build/screenshots/feedback")
 	DirAccess.make_dir_recursive_absolute(dir)

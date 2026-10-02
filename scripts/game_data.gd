@@ -28,6 +28,15 @@ const LOCATIONS: Array[Dictionary] = [
 	{"id": "car_park", "name": "West parking lot", "district": "Commercial"},
 ]
 const CONTACT_NAMES: Array[String] = ["Milo", "Jules", "Nia", "Dev", "Avery", "Sam", "Tessa", "Rowan", "Casey", "Morgan", "Lee", "Emery"]
+const CONTACT_COURSES: Array[String] = ["architecture", "culinary arts", "animation", "computer science", "photography", "music production", "design", "journalism", "accounting", "film", "engineering", "hospitality"]
+const CONTACT_HANGOUTS: Array[String] = ["the library steps", "the takeout patio", "the campus quad", "the west parking lot", "College Square market", "Deerfield apartments"]
+
+static func contact_background(contact_name: String) -> Dictionary:
+	var index: int = CONTACT_NAMES.find(contact_name)
+	if index < 0: index = posmod(contact_name.hash(), CONTACT_COURSES.size())
+	var course: String = CONTACT_COURSES[index % CONTACT_COURSES.size()]
+	var hangout: String = CONTACT_HANGOUTS[index % CONTACT_HANGOUTS.size()]
+	return {"course": course, "hangout": hangout, "bio": "%s studies %s and usually hangs out at %s." % [contact_name, course, hangout]}
 
 static func item_name(item: String) -> String:
 	return str(ITEMS.get(item, {}).get("name", item.capitalize()))

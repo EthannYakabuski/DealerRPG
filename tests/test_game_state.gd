@@ -260,6 +260,7 @@ func _test_feedback_events() -> void:
 	_tutorial()
 	game.reputation = 5
 	game._maybe_referral(game.contacts[0])
+	game.resolve_introduction(int(game.pending_introductions()[0]["id"]), "accept")
 	game.inventory["dime_bag"] = 12
 	game.minute = 1020.0
 	game.player_location_id = "home"
@@ -353,6 +354,7 @@ func _test_party_and_unlocks() -> void:
 	_check(not game.host_party(), "party requires a social circle")
 	game.reputation = 5
 	game._maybe_referral(game.contacts[0])
+	game.resolve_introduction(int(game.pending_introductions()[0]["id"]), "accept")
 	game.inventory["dime_bag"] = 12
 	game.minute = 1020.0
 	var old_cash: float = game.cash
@@ -461,6 +463,11 @@ func _test_campaign() -> void:
 	var supplier_transactions: int = 0
 	while game.status == "playing" and game.cash < game.tuition_remaining and iterations < 450:
 		iterations += 1
+		for introduction: Dictionary in game.pending_introductions():
+			var profile: Dictionary = game.contact_profile(str(introduction["referrer_id"]))
+			game.ask_introduction(int(introduction["id"]), "referrer")
+			var answer: String = game.ask_introduction(int(introduction["id"]), "connection")
+			game.resolve_introduction(int(introduction["id"]), "accept" if answer.contains(str(profile["course"])) and answer.contains(str(profile["hangout"])) else "block")
 		if game.hunger < 38.0:
 			game.player_location_id = "market"
 			if int(game.inventory["sandwich"]) == 0: game.buy_item("sandwich", 1)
@@ -501,12 +508,17 @@ func _test_campaign() -> void:
 	print("CAMPAIGN: %d iterations, %d sales, %d supplier meets, day %d, rep %d, %d contacts" % [iterations, game.total_sales, supplier_transactions, game.day_number(), game.reputation, game.contacts.size()])
 
 func _advance_campaign_to(target: float) -> void:
-	var next_class: float = game.next_class_minute()
-	if target >= next_class - 10.0:
-		game.advance_time(maxf(0.0, next_class - 10.0 - game.minute))
-		game.player_location_id = "campus_quad"
-		game.attend_class()
-	game.advance_time(maxf(0.0, target - game.minute))
+	while game.minute < target and game.status == "playing":
+		if game.hunger < 38.0:
+			game.player_location_id = "market"
+			if int(game.inventory["sandwich"]) == 0: game.buy_item("sandwich", 1)
+			game.consume_item("sandwich")
+		var next_class: float = game.next_class_minute()
+		if game.minute >= next_class - 10.0:
+			game.player_location_id = "campus_quad"
+			game.attend_class()
+			continue
+		game.advance_time(minf(minf(target, next_class - 10.0) - game.minute, 60.0))
 
 func _new_message() -> Dictionary:
 	for message: Dictionary in game.inbox:

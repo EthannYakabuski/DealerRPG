@@ -17,6 +17,9 @@ var location_tick := 0.0
 var started := false
 var camera_zoom := 37.0
 var navigation_marker: MeshInstance3D
+var conversation_id := ""
+var controller_active := false
+var _last_stick_value_step := 0
 
 func _exit_tree() -> void:
 	# Release active mixer voices before a scene is restarted or unloaded.
@@ -56,6 +59,12 @@ func _ready() -> void:
 	add_child(ui)
 	Game.ended.connect(_on_ended)
 	Game.notification.connect(_on_notification)
+	Game.civilian_reaction.connect(_on_civilian_reaction)
+	Game.police_tip.connect(population.respond_to_tip)
+	population.informant_reported.connect(_on_informant_reported)
+	Input.joy_connection_changed.connect(_on_controller_connection)
+	controller_active = not Input.get_connected_joypads().is_empty()
+	ui.set_controller_active(controller_active)
 	Game.paused=true
 	_setup_audio()
 	_update_lighting()
@@ -63,14 +72,39 @@ func _ready() -> void:
 		start_game(false)
 
 func _setup_inputs() -> void:
-	var keys := {"move_up":[KEY_W,KEY_UP],"move_down":[KEY_S,KEY_DOWN],"move_left":[KEY_A,KEY_LEFT],"move_right":[KEY_D,KEY_RIGHT],"sprint":[KEY_SHIFT],"interact":[KEY_E],"phone":[KEY_TAB,KEY_P],"backpack":[KEY_B,KEY_I],"map":[KEY_M],"skateboard":[KEY_SPACE],"vehicle":[KEY_V],"punch":[KEY_J],"kick":[KEY_K],"shoot":[KEY_L],"pause_game":[KEY_ESCAPE]}
-	for action in keys:
-		if not InputMap.has_action(action):
-			InputMap.add_action(action)
-		for code in keys[action]:
-			var event:=InputEventKey.new()
-			event.physical_keycode=code
-			InputMap.action_add_event(action,event)
+	GameControls.setup()
+
+func _on_controller_connection(_device: int, connected: bool) -> void:
+	controller_active = connected or not Input.get_connected_joypads().is_empty()
+	ui.set_controller_active(controller_active)
+	if controller_active: ui.focus_first_action()
+
+func _input(event: InputEvent) -> void:
+	if not ui: return
+	var using_pad := event is InputEventJoypadButton or (event is InputEventJoypadMotion and absf(event.axis_value)>0.3)
+	var using_keyboard := event is InputEventKey or event is InputEventMouseButton
+	if using_pad and not controller_active:
+		controller_active = true
+		ui.set_controller_active(true)
+		if Game.paused: ui.focus_first_action()
+	elif using_keyboard and controller_active:
+		controller_active = false
+		ui.set_controller_active(false)
+	if event is InputEventKey and not event.echo and Game.paused and started and Game.status=="playing":
+		for action: String in ["phone","backpack","map","agenda"]:
+			if event.is_action_pressed(action):
+				ui.close_page()
+				get_viewport().set_input_as_handled()
+				return
+	if using_pad and Game.paused:
+		var direction := int(event.is_action_pressed("ui_right"))-int(event.is_action_pressed("ui_left"))
+		if direction != 0:
+			# Analog motion can generate many events while held. Bound value repeats.
+			if event is InputEventJoypadMotion and Time.get_ticks_msec()-_last_stick_value_step<180:
+				return
+			if ui.adjust_focused_value(direction):
+				_last_stick_value_step = Time.get_ticks_msec()
+				get_viewport().set_input_as_handled()
 
 func _setup_environment() -> void:
 	var node := WorldEnvironment.new()
@@ -165,11 +199,20 @@ func _update_lighting() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.echo:
 		return
+	if event.is_action_pressed("ui_cancel") and ui.page!="" and started and Game.status=="playing":
+		ui.close_page()
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("pause_game"):
 		if started and Game.status=="playing":
 			ui.toggle_page("pause")
 		return
 	if not started or Game.status!="playing":
+		return
+	# D-pad navigation belongs to the focused menu while a panel is open.
+	if Game.paused and (event is InputEventJoypadButton or event is InputEventJoypadMotion):
+		if event.is_action_pressed("phone") or event.is_action_pressed("backpack") or event.is_action_pressed("map"):
+			ui.close_page()
 		return
 	if event.is_action_pressed("phone"):
 		ui.toggle_page("messages")
@@ -177,6 +220,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		ui.toggle_page("backpack")
 	elif event.is_action_pressed("map"):
 		ui.toggle_page("map")
+	elif event.is_action_pressed("agenda"):
+		ui.toggle_page("agenda")
+	elif event.is_action_pressed("contacts"):
+		ui.toggle_page("contacts")
 	elif not Game.paused:
 		if event.is_action_pressed("interact"):
 			interact()
@@ -197,6 +244,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				camera_zoom=clampf(camera_zoom+2,24,65)
 
 func start_game(resume:bool) -> void:
+	end_conversation()
 	if resume:
 		if not Game.load_game():
 			Game.restart_game()
@@ -226,6 +274,7 @@ func _capture_world_state() -> void:
 		data.pursuit_state=population.capture_pursuit_state()
 	if population.has_method("capture_meeting_state"):
 		data.meeting_walks=population.capture_meeting_state()
+	data.informant_runs=population.capture_informant_state()
 	for car in population.vehicles:
 		if bool(car.get("owned",false)):
 			var parked:Vector3=car.node.position
@@ -270,6 +319,9 @@ func _restore_world_state() -> void:
 	camera.look_at(player.position)
 	if population.has_method("restore_meeting_state"):
 		population.restore_meeting_state(data.get("meeting_walks",[]))
+	population.restore_informant_state(data.get("informant_runs",[]))
+	for npc_id: String in Game.pending_civilian_reports():
+		population.start_informant_run(npc_id)
 	_update_location()
 
 func _update_location() -> void:
@@ -285,6 +337,12 @@ func _update_location() -> void:
 	Game.player_location_id=closest_location
 
 func interaction_text() -> String:
+	var hint := _interaction_text()
+	if controller_active:
+		hint = hint.replace("E  ","A  ").replace("B  ","RB  ").replace("TAB  ","LB  ").replace("V  ","Y  ").replace("SPACE","X")
+	return hint
+
+func _interaction_text() -> String:
 	if world.current_interior!="":
 		if player.position.distance_to(world.get_interior_exit())<3.3:
 			return "E  Leave building"
@@ -300,6 +358,8 @@ func interaction_text() -> String:
 			if Game.minute>=float(meeting.due_minute)-Game.MEETING_ARRIVAL_MINUTES and population.meeting_walks.get(str(int(meeting.id)),{}).get("state","approaching")=="approaching":
 				return "%s is on the way  •  %s" % [meeting.contact_name,Game.format_minute(meeting.due_minute)]
 			return "E  Meet %s  •  %s" % [meeting.contact_name,Game.format_minute(meeting.due_minute)]
+	var citizen := _conversation_target()
+	if not citizen.is_empty(): return "E  Talk to %s" % citizen.name
 	if closest_location!="":
 		var names:Dictionary={"classroom":"Attend class","market":"Shop at the market","cafe":"Order food","home":"Go home","auto_dealer":"Visit the vehicle dealer","library":"Enter the library","supplier":"Browse the underground market","skate_park":"Skate park • SPACE to ride","campus_quad":"Campus noticeboard","car_park":"Parking lot"}
 		return "E  "+str(names.get(closest_location,world.landmarks[closest_location].name))
@@ -336,8 +396,13 @@ func interact() -> void:
 				else:
 					Game.notification.emit("Move closer to %s for the handoff."%meeting.contact_name)
 				return
-			Game.complete_meeting(meeting.id)
+			ui.show_postpone_meeting(int(meeting.id))
 			return
+	var citizen := _conversation_target()
+	if not citizen.is_empty() and population.begin_conversation(str(citizen.id)):
+		conversation_id = str(citizen.id)
+		_show_conversation()
+		return
 	match closest_location:
 		"classroom":
 			if not Game.attend_class():
@@ -355,6 +420,87 @@ func interact() -> void:
 		_:
 			if Game.tutorial_step==0:
 				ui.show_page("backpack")
+
+func _conversation_target() -> Dictionary:
+	if Game.tutorial_step<3 or player.vehicle or world.current_interior!="": return {}
+	# A doorstep remains easy to use even when someone walks past it.
+	if closest_location!="" and player.position.distance_to(world.get_landmark(closest_location))<2.2: return {}
+	return population.nearest_conversational_npc(3.2)
+
+func _show_conversation(response: String="") -> void:
+	if conversation_id=="": return
+	var citizen := population.nearest_conversational_npc(4.0)
+	if str(citizen.get("id",""))!=conversation_id:
+		end_conversation()
+		ui.close_page()
+		return
+	var context: Dictionary = Game.street_conversation(conversation_id,str(citizen.name))
+	context.actor_id = conversation_id
+	context.district = world.get_district(player.position)
+	if response!="": context.response = response
+	ui.show_conversation(context)
+
+func conversation_action(npc_id: String, action: String) -> void:
+	if npc_id!=conversation_id or conversation_id=="": return
+	match action:
+		"leave":
+			ui.close_page()
+			end_conversation()
+		"offer":
+			Game.offer_street_sale(npc_id)
+			if conversation_id!="": _show_conversation()
+		"add_contact":
+			Game.add_street_contact(npc_id)
+			_show_conversation()
+		"smalltalk":
+			var citizen := population.nearest_conversational_npc(4.0)
+			var replies := {
+				"Heading to class":"I've got class soon. The walk across campus always takes longer than I think.",
+				"Lunch at College Square":"We're heading over for lunch. Have you tried the Night Owl yet?",
+				"Walking home with friends":"Just walking home with some friends. It's been a long day.",
+				"Study group at the residence":"I'm meeting my study group. We call it studying, but mostly we complain about deadlines.",
+				"Meeting friends at the quad":"Some friends are hanging out at the quad. Good weather for it.",
+				"Evening study group":"Another late study session. At least the library is quiet tonight.",
+				"Late takeout with friends":"We're hunting for something to eat before everything closes.",
+				"Heading home":"I'm heading home. An early lecture tomorrow is going to hurt.",
+				"Hanging out outside residence":"Just catching up outside residence. Everybody needed a break.",
+				"Hanging out near the parking lot":"Waiting on a friend over by the parking lot. They said five minutes..."
+			}
+			_show_conversation(str(replies.get(str(citizen.get("goal","")),"Just taking a break. How's your day going?")))
+
+func end_conversation() -> void:
+	conversation_id = ""
+	if is_instance_valid(population): population.end_conversation()
+
+func _on_civilian_reaction(npc_id: String, reaction: String) -> void:
+	if reaction!="report": return
+	end_conversation()
+	ui.close_page()
+	population.start_informant_run(npc_id)
+	_capture_world_state()
+
+func _on_informant_reported(npc_id: String) -> void:
+	Game.civilian_report_arrived(npc_id)
+
+func _in_person_meeting(meeting_id: int) -> bool:
+	_update_location()
+	if player.vehicle or world.current_interior!="": return false
+	for meeting in Game.active_meetings():
+		if int(meeting.id)==meeting_id and closest_location==meeting.location_id:
+			return population.meeting_actor_in_reach(meeting_id,4.0)
+	return false
+
+func complete_in_person(meeting_id: int) -> bool:
+	if not _in_person_meeting(meeting_id):
+		Game.notification.emit("Move beside your contact at the meeting point first.")
+		return false
+	return Game.complete_meeting(meeting_id)
+
+func postpone_in_person(meeting_id: int, delay_minutes: int=120) -> bool:
+	if not _in_person_meeting(meeting_id):
+		Game.notification.emit("Speak to your contact face to face to postpone.")
+		return false
+	return Game.postpone_meeting(meeting_id,delay_minutes)
 
 func enter_building(id:String) -> void:
 	if player.vehicle:

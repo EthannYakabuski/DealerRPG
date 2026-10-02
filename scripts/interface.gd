@@ -17,6 +17,12 @@ var title_screen: Control
 var body: VBoxContainer
 var page := ""
 var selected_message: Dictionary = {}
+var conversation: Dictionary = {}
+var postpone_meeting_id := -1
+var built_page := ""
+var page_scroll: ScrollContainer
+var controller_active := false
+var quick_actions: Dictionary = {}
 var labels: Dictionary = {}
 var bars: Dictionary = {}
 var minimap: CityMap
@@ -33,8 +39,8 @@ var sound_enabled := true
 var meeting_card: Button
 var meeting_location := ""
 var money_feedback: Array[Control] = []
-const EVENT_SOUNDS: Array[String] = ["pack", "purchase", "sale", "text", "caught", "detected", "consume", "tuition", "class", "party"]
-var tips := ["WASD move  ·  SHIFT run  ·  SPACE skateboard", "TAB phone  ·  B backpack  ·  M city map", "E interact  ·  V enter / exit vehicle", "J punch  ·  K kick  ·  L shoot  ·  ESC pause"]
+const EVENT_SOUNDS: Array[String] = ["pack", "purchase", "sale", "text", "caught", "detected", "consume", "tuition", "class", "party", "impact"]
+var tips := ["WASD move  ·  SHIFT run  ·  SPACE skateboard", "TAB phone  ·  G agenda  ·  B backpack  ·  M map", "E interact / talk / rearrange a meeting in person", "V vehicle  ·  J punch  ·  K kick  ·  L shoot"]
 
 func _ready() -> void:
 	layer=5
@@ -69,6 +75,7 @@ func _theme() -> Theme:
 	theme.set_color("font_color","Label",CREAM)
 	theme.set_color("font_color","Button",CREAM)
 	theme.set_color("font_hover_color","Button",LIME)
+	theme.set_color("font_focus_color","Button",LIME)
 	theme.set_color("font_pressed_color","Button",INK)
 	theme.set_stylebox("normal","Button",_style(Color("304238"),7,12))
 	theme.set_stylebox("hover","Button",_style(Color("3c5143"),7,12))
@@ -117,16 +124,18 @@ func _paragraph(text:String,parent:Node=body,color:Color=MUTED) -> Label:
 	parent.add_child(l)
 	return l
 
-func _button(text:String,callback:Callable,parent:Node=body,primary:bool=false) -> Button:
+func _button(text:String,callback:Callable,parent:Node=body,primary:bool=false,focus_key:String="") -> Button:
 	var b:=Button.new()
 	b.text=text
 	b.mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND
-	b.focus_mode=Control.FOCUS_NONE
+	b.focus_mode=Control.FOCUS_ALL
+	if focus_key!="": b.set_meta("focus_key",focus_key)
 	b.custom_minimum_size.y=42
 	b.pressed.connect(func():_play_sound("click-a");callback.call())
 	if primary:
 		b.add_theme_stylebox_override("normal",_style(LIME,7,12))
 		b.add_theme_color_override("font_color",INK)
+		b.add_theme_color_override("font_focus_color",INK)
 		b.add_theme_color_override("font_hover_color",INK)
 		b.add_theme_stylebox_override("hover",_style(Color("e5ffa1"),7,12))
 	parent.add_child(b)
@@ -255,9 +264,11 @@ func _build_hud() -> void:
 	hud.add_child(bottom)
 	var actions:=HBoxContainer.new()
 	bottom.add_child(actions)
-	for entry in [["TAB  Phone","messages"],["B  Backpack","backpack"],["M  Map","map"],["?  Controls","help"]]:
+	for entry in [["TAB  Phone","messages"],["G  Agenda","agenda"],["B  Backpack","backpack"],["M  Map","map"],["?  Controls","help"]]:
 		var id:String=entry[1]
-		_button(entry[0],func():toggle_page(id),actions)
+		var action_button:=_button(entry[0],func():toggle_page(id),actions)
+		action_button.focus_mode=Control.FOCUS_NONE
+		quick_actions[id]=action_button
 	var filler:=Control.new()
 	filler.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	actions.add_child(filler)
@@ -317,8 +328,10 @@ func _build_title() -> void:
 	var fill:=Control.new()
 	fill.size_flags_vertical=Control.SIZE_EXPAND_FILL
 	box.add_child(fill)
-	box.add_child(_label("WASD move   /   E interact   /   TAB phone   /   SPACE skateboard",14,MUTED))
+	labels.title_controls=_label("WASD move   /   E interact   /   TAB phone   /   SPACE skateboard",14,MUTED)
+	box.add_child(labels.title_controls)
 	box.add_child(_label("A fictional city inspired by Ottawa. All characters are adults.",11,MUTED))
+	_focus_first_in.call_deferred(title_screen)
 
 func start_play() -> void:
 	title_screen.visible=false
@@ -329,6 +342,7 @@ func start_play() -> void:
 func _process(delta:float) -> void:
 	toast_timer=maxf(0,toast_timer-delta)
 	toast_panel.visible=toast_timer>0
+	toast_panel.position.y=20 if page!="" else 115
 	refresh_elapsed+=delta
 	if refresh_elapsed>0.15:
 		refresh_elapsed=0
@@ -351,8 +365,10 @@ func _update_hud() -> void:
 	labels.chapter.text="01  /  AFTER CLASS" if Game.tutorial_step<3 else ("PURSUIT  /  BREAK LINE OF SIGHT" if game_root.population.pursuit else "YOUR STORY  /  REP %d"%Game.reputation)
 	labels.chapter.add_theme_color_override("font_color",RED if game_root.population.pursuit else LIME)
 	labels.objective.text=Game.current_objective()
+	if controller_active:
+		labels.objective.text=labels.objective.text.replace("[I]","[RB]").replace("[P]","[LB]").replace("[E]","[A]")
 	labels.interact.text=game_root.interaction_text() if page=="" else ""
-	labels.mode.text=game_root.player.travel_mode()+"   ·   SPACE to skate"
+	labels.mode.text=game_root.player.travel_mode()+("   ·   X to skate" if controller_active else "   ·   SPACE to skate")
 	minimap.destination=game_root.destination
 	if game_root.destination!="" and game_root.world.landmarks.has(game_root.destination):
 		var data:Dictionary=game_root.world.landmarks[game_root.destination]
@@ -413,7 +429,7 @@ func _update_meeting_card() -> void:
 	labels.meeting_countdown.add_theme_color_override("font_color",RED if Game.minute>float(meeting.due_minute)+1 else (AMBER if float(meeting.due_minute)-Game.minute<=15 else CREAM))
 	labels.meeting_contact.text=str(meeting.contact_name)
 	labels.meeting_place.text=Data.location_name(meeting_location)
-	labels.meeting_time.text="%s  ·  %d %s"%[Game.format_minute(float(meeting.due_minute)),int(meeting.quantity),"bundles" if meeting.type=="supplier" else "bags"]
+	labels.meeting_time.text="%s  ·  %d %s"%[_when(float(meeting.due_minute)),int(meeting.quantity),"bundles" if meeting.type=="supplier" else "bags"]
 	labels.meeting_hint.text="CLICK FOR DIRECTIONS"+ ("  /  +%d LATER"%(upcoming.size()-1) if upcoming.size()>1 else "")
 	meeting_card.tooltip_text="Set directions to "+Data.location_name(meeting_location)+". The clock keeps running."
 
@@ -528,18 +544,27 @@ func toggle_page(id:String) -> void:
 		show_page(id)
 
 func show_page(id:String) -> void:
+	if page=="conversation" and id!="conversation" and game_root.has_method("end_conversation"):
+		game_root.end_conversation()
 	page=id
 	Game.paused=true
 	_build_page()
 
 func close_page() -> void:
+	if page=="conversation" and game_root.has_method("end_conversation"):
+		game_root.end_conversation()
 	page=""
+	built_page=""
+	var focused:=get_viewport().gui_get_focus_owner()
+	if focused: focused.release_focus()
 	if modal:
 		modal.queue_free()
 		modal=null
 	Game.paused=not game_root.started or Game.status!="playing"
 
 func _build_page() -> void:
+	var focus_state:Dictionary=_capture_focus() if built_page==page else {}
+	built_page=page
 	if modal:
 		modal.queue_free()
 	modal=Control.new()
@@ -583,6 +608,8 @@ func _build_page() -> void:
 	nav.add_child(_label("CASH  $%s"%_money(Game.cash),15,CREAM))
 	nav.add_child(_label("REPUTATION  %d"%Game.reputation,12,MUTED))
 	var scroll:=ScrollContainer.new()
+	page_scroll=scroll
+	scroll.follow_focus=true
 	scroll.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical=Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode=ScrollContainer.SCROLL_MODE_DISABLED
@@ -605,11 +632,161 @@ func _build_page() -> void:
 		"campus":_campus_page()
 		"pause":_pause_page()
 		"confirm_restart":_restart_page()
+		"conversation":_conversation_page()
+		"postpone":_postpone_page()
 		_:_help_page()
 	toast_panel.move_to_front()
 	for feedback in money_feedback:
 		if is_instance_valid(feedback):
 			feedback.move_to_front()
+	_configure_focus_tree(modal)
+	_restore_focus.call_deferred(focus_state)
+
+func _focus_controls(node:Node) -> Array[Control]:
+	var result:Array[Control]=[]
+	# SpinBox's keyboard entry is an internal LineEdit. Include internal children
+	# so rebuilding a live page can restore numeric-field focus as well as buttons.
+	for child in node.get_children(true):
+		if child is Control and child.focus_mode==Control.FOCUS_ALL and child.is_visible_in_tree():
+			if not child is BaseButton or not child.disabled:
+				result.append(child)
+		result.append_array(_focus_controls(child))
+	return result
+
+func _focus_first_in(node:Control) -> void:
+	if not is_instance_valid(node) or not node.is_visible_in_tree(): return
+	var controls:=_focus_controls(node)
+	if not controls.is_empty(): controls[0].grab_focus()
+
+func focus_first_action() -> void:
+	if page!="" and is_instance_valid(body):
+		_focus_first_in(body)
+		if not get_viewport().gui_get_focus_owner(): _focus_first_in(modal)
+	elif is_instance_valid(title_screen) and title_screen.visible:
+		_focus_first_in(title_screen)
+
+func _configure_focus_tree(node:Node) -> void:
+	for child in node.get_children():
+		if child is SpinBox:
+			child.focus_mode=Control.FOCUS_NONE
+			var edit:LineEdit=child.get_line_edit()
+			edit.focus_mode=Control.FOCUS_ALL
+			edit.add_theme_stylebox_override("focus",_outline(LIME))
+		elif child is OptionButton:
+			child.focus_mode=Control.FOCUS_ALL
+			child.add_theme_stylebox_override("focus",_outline(LIME))
+		_configure_focus_tree(child)
+
+func _capture_focus() -> Dictionary:
+	var focused:=get_viewport().gui_get_focus_owner()
+	if not focused or not is_instance_valid(modal) or not modal.is_ancestor_of(focused): return {}
+	var path:Array[int]=[]
+	var cursor:Node=focused
+	while cursor!=modal:
+		path.push_front(cursor.get_index(true))
+		cursor=cursor.get_parent()
+	return {"key":str(focused.get_meta("focus_key","")),"path":path,"scroll":page_scroll.scroll_vertical if is_instance_valid(page_scroll) else 0}
+
+func _restore_focus(state:Dictionary) -> void:
+	# Containers lay out at the end of a frame. Focusing an internal numeric entry
+	# before that can scroll to its stale rectangle and hide the page introduction.
+	var target_modal:Control=modal
+	await get_tree().process_frame
+	if not is_instance_valid(target_modal) or modal!=target_modal: return
+	if page=="" or not is_instance_valid(modal): return
+	if not state.is_empty():
+		if is_instance_valid(page_scroll): page_scroll.scroll_vertical=int(state.get("scroll",0))
+		var key:String=state.get("key","")
+		if key!="":
+			for control in _focus_controls(modal):
+				if str(control.get_meta("focus_key",""))==key:
+					control.grab_focus()
+					return
+		var candidate:Node=modal
+		for index in state.get("path",[]):
+			if int(index)>=candidate.get_child_count(true):
+				candidate=null
+				break
+			candidate=candidate.get_child(int(index),true)
+		if candidate is Control and candidate.focus_mode==Control.FOCUS_ALL and candidate.is_visible_in_tree():
+			if not candidate is BaseButton or not candidate.disabled:
+				candidate.grab_focus()
+				return
+	focus_first_action()
+
+func adjust_focused_value(direction:int) -> bool:
+	var focused:=get_viewport().gui_get_focus_owner()
+	if not focused or page=="": return false
+	var spin:SpinBox=focused if focused is SpinBox else (focused.get_parent() if focused.get_parent() is SpinBox else null)
+	if not spin: return false
+	spin.value=clampf(spin.value+float(direction)*spin.step,spin.min_value,spin.max_value)
+	return true
+
+func _when(minute:float) -> String:
+	return "Day %d / %s"%[int(floor(minute/1440.0))+1,Game.format_minute(minute)]
+
+func set_controller_active(active:bool) -> void:
+	controller_active=active
+	var names:Dictionary={"messages":"LB  Phone","agenda":"D-UP  Agenda","backpack":"RB  Backpack","map":"SELECT  Map","help":"Controls"} if active else {"messages":"TAB  Phone","agenda":"G  Agenda","backpack":"B  Backpack","map":"M  Map","help":"?  Controls"}
+	for id:String in quick_actions:
+		quick_actions[id].text=names[id]
+	labels.title_controls.text="LEFT STICK move   /   A interact   /   LB phone   /   X skateboard" if active else "WASD move   /   E interact   /   TAB phone   /   SPACE skateboard"
+	if active and not get_viewport().gui_get_focus_owner(): focus_first_action()
+	_update_hud()
+
+func show_conversation(context:Dictionary) -> void:
+	conversation=context.duplicate(true)
+	show_page("conversation")
+
+func _conversation_page() -> void:
+	_heading(str(conversation.get("name","Someone nearby")),str(conversation.get("district","A conversation on the street")))
+	var card:=_card()
+	var reply:String=str(conversation.get("response",conversation.get("text","You catch their attention. Start with a conversation, or take a chance on an offer.")))
+	_paragraph(reply,card,CREAM)
+	var actor_id:String=str(conversation.get("actor_id",conversation.get("npc_id","")))
+	_button("MAKE SMALL TALK",func():game_root.conversation_action(actor_id,"smalltalk"),card,false,"street_talk")
+	if bool(conversation.get("can_offer",true)):
+		_button("OFFER A BAG  /  $%s"%_money(float(conversation.get("price",22))),func():game_root.conversation_action(actor_id,"offer"),card,true,"street_offer")
+	if bool(conversation.get("can_add_contact",false)):
+		_button("SAVE THEIR NUMBER",func():game_root.conversation_action(actor_id,"add_contact"),card,true,"street_save")
+	_paragraph("People react differently. Get to know someone before deciding whether to trust them.",card)
+	_button("LEAVE",func():game_root.conversation_action(actor_id,"leave"),body,false,"street_leave")
+
+func show_postpone_meeting(meeting_id:int) -> void:
+	postpone_meeting_id=meeting_id
+	show_page("postpone")
+
+func _postpone_page() -> void:
+	var appointment:Dictionary={}
+	for entry in Game.active_meetings():
+		if int(entry.id)==postpone_meeting_id: appointment=entry
+	if appointment.is_empty():
+		_heading("This meeting is finished","Check your agenda for your next connection.")
+		_button("BACK TO THE CITY",close_page,body,true)
+		return
+	_heading("Meet "+str(appointment.contact_name),"You are here together. Complete the handoff, or ask for another opportunity later.")
+	var card:=_card()
+	var supplier:bool=appointment.type=="supplier"
+	_paragraph("%s  ·  %s\n%d %s  /  $%s total"%[_when(float(appointment.due_minute)),Data.location_name(str(appointment.location_id)),int(appointment.quantity),"bundles" if supplier else "bags",_money(float(appointment.cost) if supplier else float(appointment.price)*int(appointment.quantity))],card,CREAM)
+	var patrols:int=game_root.population.police_presence_count(game_root.player.position)
+	if patrols>0:
+		_paragraph("You can see %d %s nearby. You can ask for more time if this feels exposed."%[patrols,"patrol" if patrols==1 else "patrols"],card,AMBER)
+	var id:int=postpone_meeting_id
+	_button("COMPLETE HANDOFF",func():
+		if game_root.complete_in_person(id) and Game.status=="playing": close_page(),card,true,"meeting_handoff")
+	var later:=_card()
+	_paragraph("Need more time? Ask them to text again later. This clears the current appointment without a trust penalty; agree on a new meeting when they reply.",later)
+	var delay:=OptionButton.new()
+	delay.custom_minimum_size.y=44
+	delay.set_meta("focus_key","postpone_delay")
+	var delays:Array[int]=[120,180,240]
+	for minutes:int in delays:
+		delay.add_item("Text again in %d %s"%[int(minutes/60.0),"hour" if minutes==60 else "hours"])
+	delay.select(0)
+	later.add_child(delay)
+	_button("CONFIRM POSTPONEMENT",func():
+		if game_root.postpone_in_person(id,delays[delay.selected]) and Game.status=="playing": close_page(),later,false,"meeting_postpone")
+	_button("CLOSE WITHOUT CHANGING THE MEETING",close_page)
 
 func _heading(title:String,subtitle:String="") -> void:
 	body.add_child(_label(title,30,CREAM))
@@ -626,6 +803,9 @@ func _messages_page() -> void:
 	if Game.tutorial_step<2:
 		_paragraph("Your phone is quiet. Milo is waiting outside class. Start with your backpack.")
 	var count:=0
+	for introduction:Dictionary in Game.pending_introductions():
+		count+=1
+		_introduction_card(introduction)
 	for message in Game.inbox:
 		if message.status!="new":
 			continue
@@ -635,20 +815,53 @@ func _messages_page() -> void:
 		var name:=_label(str(message.contact_name).to_upper(),18,LIME)
 		name.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 		row.add_child(name)
-		row.add_child(_label("%d BAGS"%int(message.quantity),13,AMBER))
+		var callback:bool=str(message.get("type","client"))=="supplier_callback"
+		row.add_child(_label("PICKUP CALLBACK" if callback else "%d BAGS"%int(message.quantity),13,AMBER))
 		_paragraph(str(message.get("text","Hey, are you around? Can we meet up today?")),card,CREAM)
-		_paragraph("Reply before %s. You have %d packed bags."%[Game.format_minute(message.expires_minute),Game.inventory.dime_bag],card)
+		_paragraph("Reply before %s."%_when(float(message.expires_minute)),card)
 		var current:Dictionary=message.duplicate(true)
-		_button("ARRANGE A MEETING   >",func():selected_message=current;show_page("schedule"),card,true)
+		var message_id:int=int(message.id)
+		if callback:
+			_paragraph("Pickups run 22:00–02:00. Next available: %s."%_when(Game.next_supplier_minute()),card,AMBER)
+			_button("ARRANGE THIS PICKUP",func():
+				if Game.accept_supplier_callback(message_id): show_page("agenda"),card,true,"pickup_%d"%message_id)
+		else:
+			_paragraph("You have %d packed bags."%Game.inventory.dime_bag,card)
+			if message.has("max_price"):
+				_paragraph("Their offer: up to $%s per bag."%_money(float(message.max_price)),card,AMBER)
+			_button("ARRANGE A MEETING   >",func():selected_message=current;show_page("schedule"),card,true,"request_%d"%message_id)
+			_button("HIT ME UP TOMORROW",func():Game.request_tomorrow(message_id),card,false,"tomorrow_%d"%message_id)
 	if count==0 and Game.tutorial_step>=3:
 		_paragraph("All caught up. New texts arrive as time passes. Better relationships bring more introductions.")
 		_button("CHECK YOUR AGENDA",func():show_page("agenda"))
+
+func _introduction_card(introduction:Dictionary) -> void:
+	var card:=_card()
+	var id:int=int(introduction.id)
+	card.add_child(_label(str(introduction.name).to_upper()+"  /  NEW NUMBER",18,AMBER))
+	_paragraph(str(introduction.text),card,CREAM)
+	_paragraph("Ask a little before saving this number. Answers are clues, not proof.",card)
+	var questions:=_row(card)
+	var who:=_button("WHO REFERRED YOU?",func():Game.ask_introduction(id,"referrer"),questions,false,"intro_%d_who"%id)
+	var connection:=_button("HOW DO YOU KNOW THEM?",func():Game.ask_introduction(id,"connection"),questions,false,"intro_%d_connection"%id)
+	who.disabled=str(introduction.get("who_answer",""))!=""
+	connection.disabled=str(introduction.get("connection_answer",""))!=""
+	if who.disabled: _paragraph(str(introduction.who_answer),card,CREAM)
+	if connection.disabled: _paragraph(str(introduction.connection_answer),card,CREAM)
+	var profile:Dictionary=Game.contact_profile(str(introduction.get("referrer_id","")))
+	if not profile.is_empty() and (who.disabled or connection.disabled):
+		_paragraph("WHAT YOU KNOW ABOUT %s\nStudies %s. Usually around %s."%[str(profile.get("name",introduction.get("referrer_name","your friend"))).to_upper(),str(profile.get("course","")),str(profile.get("hangout",""))],card,MUTED)
+	var decisions:=_row(card)
+	_button("SAVE CONTACT",func():Game.resolve_introduction(id,"accept"),decisions,true,"intro_%d_accept"%id)
+	_button("DECLINE",func():Game.resolve_introduction(id,"decline"),decisions,false,"intro_%d_decline"%id)
+	_button("BLOCK NUMBER",func():Game.resolve_introduction(id,"block"),decisions,false,"intro_%d_block"%id)
 
 func _schedule_page() -> void:
 	_heading("Meet "+str(selected_message.get("contact_name","a contact")),"Arrive on time for full trust. Contacts aim to be there about 12 minutes early.")
 	var card:=_card()
 	card.add_child(_label("MEETING PLACE",12,LIME))
 	var location:=OptionButton.new()
+	location.set_meta("focus_key","schedule_location")
 	location.custom_minimum_size.y=44
 	var locations:Array=Game.available_locations()
 	for item in locations:
@@ -656,17 +869,19 @@ func _schedule_page() -> void:
 	card.add_child(location)
 	card.add_child(_label("TIME FROM NOW",12,LIME))
 	var time:=OptionButton.new()
+	time.set_meta("focus_key","schedule_time")
 	time.custom_minimum_size.y=44
-	var delays:=[30,60,90,120,180,240]
+	var delays:=[30,60,90,120,180,240,300,360,420,480]
 	for delay in delays:
-		time.add_item("%s  ·  in %d minutes"%[Game.format_minute(Game.minute+delay),delay])
+		time.add_item("%s  ·  in %d minutes"%[_when(Game.minute+delay),delay])
 	time.select(2)
 	card.add_child(time)
 	card.add_child(_label("PRICE PER BAG  /  FAIR PRICES BUILD TRUST",12,LIME))
 	var price:=SpinBox.new()
 	price.min_value=12
-	price.max_value=40
-	price.value=22
+	price.max_value=float(selected_message.get("max_price",40))
+	price.value=minf(price.max_value,float(selected_message.get("suggested_price",22)))
+	price.get_line_edit().set_meta("focus_key","schedule_price")
 	price.prefix="$"
 	price.step=1
 	card.add_child(price)
@@ -687,6 +902,13 @@ func _contacts_page() -> void:
 		var trust:float=float(contact.get("relationship",contact.get("trust",50)))
 		_paragraph("Relationship: %d / 100   ·   Completed deals: %d"%[int(trust),int(contact.get("sales",contact.get("deals",0)))],card,CREAM)
 		_paragraph("Reliable regular" if trust>=65 else "Getting to know you",card)
+		var id:String=str(contact.id)
+		var profile:Dictionary=Game.contact_profile(id)
+		if not profile.is_empty():
+			_paragraph(str(profile.get("bio","Studies %s. Usually around %s."%[profile.get("course",""),profile.get("hangout","")])),card)
+		var last_reply:String=str(contact.get("last_reply",profile.get("last_reply","")))
+		if last_reply!="": _paragraph('Last reply: "%s"'%last_reply,card,CREAM)
+		_button("TEXT THEM / CHECK IN",func():Game.text_contact(id),card,false,"contact_%s_text"%id)
 	if Game.contacts.is_empty():
 		_paragraph("Your network begins with Milo. Finish your first handoff outside class.")
 	if not Game.contacts.is_empty():
@@ -703,7 +925,7 @@ func _agenda_page() -> void:
 	_button("DIRECTIONS TO CLASS",func():game_root.navigate("classroom");close_page(),class_card)
 	for meeting in Game.active_meetings():
 		var card:=_card()
-		card.add_child(_label("%s   /   %s"%[Game.format_minute(meeting.due_minute),str(meeting.contact_name).to_upper()],20,AMBER))
+		card.add_child(_label("%s   /   %s"%[_when(float(meeting.due_minute)),str(meeting.contact_name).to_upper()],20,AMBER))
 		_paragraph("%s  ·  %d %s  ·  %s"%[Data.location_name(meeting.location_id),meeting.quantity,"bundles" if meeting.type=="supplier" else "bags","$%d total"%int(meeting.cost) if meeting.type=="supplier" else "$%d per bag"%int(meeting.price)],card,CREAM)
 		var row:=_row(card)
 		var id:int=meeting.id
@@ -725,7 +947,8 @@ func _agenda_page() -> void:
 		_paragraph("No meetings scheduled. Check your messages or arrange a supplier pickup.")
 
 func _suppliers_page() -> void:
-	_heading("The next connection","Arrange a pickup, bring the cash, and get there yourself. Larger connections carry larger risks.")
+	_heading("The next connection","Pickups run nightly, 22:00–02:00. Arrange a slot, bring the cash, and meet in person.")
+	_paragraph("Next available pickup: %s. Larger connections carry larger risks."%_when(Game.next_supplier_minute()),body,AMBER)
 	for supplier in Game.supplier_catalog():
 		var card:=_card()
 		card.add_child(_label(str(supplier.name).to_upper(),23,LIME))
@@ -733,15 +956,17 @@ func _suppliers_page() -> void:
 		_paragraph("$%d / bundle  ·  %d%% quality  ·  %d%% bust risk\nOne bundle packs into six bags."%[supplier.bundle_price,int(supplier.quality*100),int(supplier.risk*100)],card,CREAM)
 		var row:=_row(card)
 		var quantity:=SpinBox.new()
+		quantity.custom_minimum_size.x=150
 		quantity.min_value=1
 		quantity.max_value=supplier.max_bundles
 		quantity.value=1
 		quantity.suffix="bundles"
+		quantity.get_line_edit().set_meta("focus_key","supplier_%d_quantity"%int(supplier.tier))
 		row.add_child(quantity)
 		var tier:int=supplier.tier
 		var b:=_button("ARRANGE PICKUP",func():
 			if Game.supplier_order(tier,int(quantity.value)):
-				show_page("agenda"),row,Game.reputation>=supplier.reputation_required)
+				show_page("agenda"),row,Game.reputation>=supplier.reputation_required,"supplier_%d_order"%tier)
 		b.disabled=Game.reputation<supplier.reputation_required
 
 func _backpack_page() -> void:
@@ -763,12 +988,12 @@ func _backpack_page() -> void:
 			"flower":_button("SPLIT INTO SIX DIME BAGS",func():Game.split_flower(),card,true)
 			"sandwich","energy_drink":_button("CONSUME",func():Game.consume_item(id),card,true)
 			"skateboard":_button("EQUIP / STOW",func():close_page();game_root.player.toggle_skateboard(),card)
-			"dime_bag":_paragraph("Quality: %d%%. Hand off at your scheduled meeting with E."%int(Game.dime_quality*100),card,AMBER)
+			"dime_bag":_paragraph("Quality: %d%%. Hand off at your scheduled meeting with %s."%[int(Game.dime_quality*100),"A" if controller_active else "E"],card,AMBER)
 		if item not in ["skateboard","flower","dime_bag"] or Game.tutorial_step>=3:
 			_button("DISCARD ONE  /  FREE UP SPACE",func():Game.discard_item(id,1),card)
 
 func _map_page() -> void:
-	_heading("Know your neighbourhood","Click a landmark to set directions. Campus south and east; College Square west; Deerfield northeast.")
+	_heading("Know your neighbourhood","Choose a destination below or click a landmark. Campus south and east; College Square west; Deerfield northeast.")
 	var map:=CityMap.new()
 	map.large=true
 	map.city=game_root.world
@@ -777,6 +1002,21 @@ func _map_page() -> void:
 	map.destination=game_root.destination
 	map.custom_minimum_size=Vector2(650,440)
 	map.landmark_selected.connect(func(id:String):game_root.navigate(id);map.destination=id)
+	var route:=_row()
+	var destination:=OptionButton.new()
+	destination.custom_minimum_size=Vector2(300,44)
+	destination.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+	destination.set_meta("focus_key","map_destination")
+	for id:String in game_root.world.landmarks:
+		var index:int=destination.item_count
+		destination.add_item(str(game_root.world.landmarks[id].name))
+		destination.set_item_metadata(index,id)
+		if id==game_root.destination: destination.select(index)
+	route.add_child(destination)
+	_button("SET DIRECTIONS",func():
+		var id:String=destination.get_selected_metadata()
+		game_root.navigate(id)
+		map.destination=id,route,true,"map_route")
 	body.add_child(map)
 	_paragraph("Blue patrols belong to campus security. City police cover commercial and residential streets. Both can pursue you after witnessing a crime.")
 
@@ -864,6 +1104,8 @@ func _help_page() -> void:
 	for tip in tips:
 		var card:=_card()
 		card.add_child(_label(tip,18,CREAM))
+	_paragraph("CONTROLLER: Left stick move; A interact / confirm; B close; X skateboard; Y vehicle; LT run; RT punch; LB phone; RB backpack; Select map; Start pause. D-pad up agenda, right contacts, left kick, down shoot. In menus, D-pad or stick selects; A confirms; left/right adjusts a focused price or quantity.")
+	_paragraph("CONNECTIONS: Talk to people in the city, check in with saved contacts, and decide which introductions to trust. Questions and what you know about a friend can help you judge a new number. You can ask new requests to text tomorrow. At an in-person meetup, E opens the choice to complete the handoff or discuss postponing.")
 	_paragraph("Mouse wheel changes camera distance. Click map landmarks for directions. Menus pause the clock. Close a menu with its Close button, Escape, or the same shortcut.")
 	_paragraph("MEETINGS: Pack stock in your backpack, answer a text, choose a place/time/price, follow the map, and press E to hand off. If early, Agenda can skip ahead to 30 minutes before the meeting. Close your phone and watch your contact walk over; they aim to arrive 12 minutes early. The clock pauses in menus.")
 	_paragraph("SURVIVAL: Eat sandwiches, attend class daily between 09:00 and 10:00, and sleep at home. Three missed classes means eviction. Campus shifts can help recover seed money.")
@@ -897,3 +1139,4 @@ func show_ending(won:bool,reason:String) -> void:
 	_paragraph("Day %d  ·  Sales: %d  ·  Contacts: %d\nEarned: $%s  ·  Classes attended: %d"%[Game.day_number(),Game.total_sales,Game.contacts.size(),_money(Game.total_earned),Game.classes_attended],box)
 	_space(box,20)
 	_button("START A NEW STORY",func():Game.restart_game();get_tree().reload_current_scene(),box,true)
+	_focus_first_in.call_deferred(modal)

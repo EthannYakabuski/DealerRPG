@@ -9,6 +9,7 @@ var player: Node3D
 var population: Node3D
 var game: Node
 var crimes := 0
+var civilian_reports := 0
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -38,6 +39,8 @@ func _run() -> void:
 	await _test_player()
 	await _test_surface_traversal()
 	await _test_vehicles()
+	await _test_traffic_impacts()
+	await _test_civilian_reports()
 	await _test_meetings()
 	await _test_dynamic_simulation()
 	await _test_traffic_endurance()
@@ -448,3 +451,135 @@ func _test_traffic_endurance() -> void:
 		if bool(movers[index].get("police",false)) and distance>500.0: cruiser_moves = true
 	_check(spacing_ok,"following traffic keeps separate car bodies in the same lane")
 	_check(cruiser_moves,"marked police cruiser participates in moving road traffic")
+
+func _test_traffic_impacts() -> void:
+	_reset_crime()
+	player.reset_travel()
+	player.blocked = false
+	var probe: Node3D = population._vehicle("sedan")
+	probe.rotation.y = 0.0
+	player.position = Vector3(0,0.2,48)
+	probe.position = Vector3(0,0.2,53)
+	population._apply_traffic_impact(probe,Vector3(0,0.2,43),Vector3(0,0,8))
+	_check(game.health<100.0 and game.health>55.0,"swept traffic bumper hits a pedestrian between frame endpoints without an instant kill")
+	var after_hit: float = game.health
+	population._apply_traffic_impact(probe,Vector3(0,0.2,43),Vector3(0,0,8))
+	_check(game.health==after_hit,"continuous contact cannot repeat vehicle damage on consecutive frames")
+	player.reset_travel()
+	game.health = 100.0
+	player.position.x = 2.0
+	population._apply_traffic_impact(probe,Vector3(0,0.2,43),Vector3(0,0,8))
+	_check(game.health==100.0,"nearby passing traffic does not damage a student outside its body width")
+	player.position.x = 0.0
+	probe.position.z = 60.0
+	population._apply_traffic_impact(probe,Vector3(0,0.2,36),Vector3(0,0,8))
+	_check(game.health<100.0,"swept broadphase also catches a collision across a long render hitch")
+	player.reset_travel()
+	game.health = 100.0
+	probe.position.z = 53.0
+	player.position.x = 0.0
+	population._apply_traffic_impact(probe,Vector3(0,0.2,43),Vector3(0,0,1.0))
+	_check(game.health==100.0,"crawling traffic does not repeatedly chip away health")
+	player.vehicle = probe
+	population._apply_traffic_impact(probe,Vector3(0,0.2,43),Vector3(0,0,8))
+	_check(game.health==100.0,"traffic cannot strike its own driver")
+	player.reset_travel()
+	player.skateboarding = true
+	population._apply_traffic_impact(probe,Vector3(0,0.2,43),Vector3(0,0,8))
+	_check(not player.skateboarding and player.impact_velocity.length()>3.0,"moving traffic knocks a skateboard rider off the board")
+	player.reset_travel()
+	game.health = 100.0
+	var original_parked: Array[bool] = []
+	for car: Dictionary in population.vehicles:
+		original_parked.append(bool(car.parked))
+		car.parked = true
+	probe.position = Vector3(0,0.2,43)
+	var traffic_record := {"node":probe,"route":PackedVector3Array([Vector3(0,0.2,43),Vector3(0,0.2,65)]),"index":1,"speed":8.0,"parked":false,"occupied":false,"stolen":false,"wait":0.0,"stuck":0.0,"distance_travelled":0.0}
+	population.vehicles.append(traffic_record)
+	for tick in 50: population._update_traffic(1.0/60.0,false)
+	_check(game.health<100.0 and probe.position.z>48.0,"actual traffic update continues through a pedestrian crossing and delivers the impact")
+	population.vehicles.erase(traffic_record)
+	for index in population.vehicles.size(): population.vehicles[index].parked = original_parked[index]
+	probe.queue_free()
+	player.reset_travel()
+	await physics_frame
+
+func _test_civilian_reports() -> void:
+	_reset_crime()
+	population.reset_population()
+	population.set_physics_process(false)
+	player.reset_travel()
+	var citizen: Dictionary = population.citizens[0]
+	var identity: String = citizen.id
+	var identities: Dictionary = {}
+	for record: Dictionary in population.citizens: identities[record.id] = record.name
+	_check(identities.size()==42 and identities.has("citizen_00") and identities.has("citizen_41"),"all ambient pedestrians have stable distinct social identities")
+	for record: Dictionary in population.citizens: record.node.position = Vector3(130,0.2,-110)
+	citizen.node.position = Vector3(0,0.2,48)
+	player.position = Vector3(2,0.2,48)
+	await physics_frame
+	_check(population.nearest_conversational_npc().id==identity and population.begin_conversation(identity),"a visible pedestrian in reach can become the named interlocutor")
+	var held_at: Vector3 = citizen.node.position
+	for tick in 90: population._update_citizen(citizen,1.0/60.0,false)
+	_check(citizen.node.position.distance_to(held_at)<0.001,"the interlocutor stays still during face-to-face conversation")
+	population.citizens[1].node.position = player.position+Vector3(0.5,0,0)
+	_check(population.nearest_conversational_npc(4.0).id==identity,"held conversation retains its original speaker even if someone else approaches")
+	population.end_conversation()
+	_check(not citizen.conversation,"closing a conversation releases its pedestrian")
+	population.citizens[1].node.position = Vector3(130,0.2,-110)
+	for officer: Dictionary in population.police:
+		officer.hp = 150.0
+		officer.node.position = Vector3(130,0.2,110)
+	population.police[0].node.position = Vector3(0,0.2,65)
+	population.police[1].node.position = Vector3(0,0.2,50)
+	population.police[1].hp = 0.0
+	population.police[4].node.position = Vector3(2,0.2,50)
+	population.pursuit = false
+	population._refresh_neighbor_lists()
+	population.informant_reported.connect(func(_id: String) -> void: civilian_reports += 1)
+	_check(population.start_informant_run(identity),"a refused street offer can start a physical report run")
+	_check(not population.pursuit and civilian_reports==0,"the report does not alert police remotely before the witness reaches an officer")
+	_check(population._nearest_officer_index(citizen.node.position,true)==0,"witness ignores nearer dead officers and officers outside the report jurisdiction")
+	player.position = Vector3(135,0.2,-110)
+	for tick in 60:
+		population._update_citizen(citizen,1.0/60.0,false)
+		if tick%20==0: await physics_frame
+	_check(citizen.node.position.distance_to(held_at)>3.0 and not population.pursuit,"offscreen witness continues travelling without triggering an early report")
+	var saved: Array = population.capture_informant_state()
+	var saved_position: Vector3 = citizen.node.position
+	citizen.node.position = Vector3(100,0.2,-100)
+	citizen.reporting = false
+	population.restore_informant_state(JSON.parse_string(JSON.stringify(saved)))
+	population.start_informant_run(identity)
+	_check(citizen.node.position.distance_to(saved_position)<0.001 and citizen.reporting,"report runner survives JSON save/resume and idempotent pending-report restoration")
+	for tick in 360:
+		population._update_citizen(citizen,1.0/60.0,false)
+		if tick%20==0: await physics_frame
+		if not citizen.reporting: break
+	_check(citizen.reported and civilian_reports==1 and population.pursuit,"witness reaches a living patrol physically before its single report starts a search")
+	_check(game.status=="playing" and population.arrest_seconds==0.0,"a successful distant witness report does not remotely arrest the student")
+	_check(population.police[0].alert>0.0 and population.police[4].alert==0.0,"the officer receiving the report is alerted in the appropriate jurisdiction")
+	_check(population.capture_informant_state().is_empty(),"completed report runners are removed from the pending world snapshot")
+	_reset_crime()
+	player.position = Vector3(135,0.2,-110)
+	var cafe: Vector3 = world.get_landmark("cafe")
+	population.police[4].node.position = cafe+Vector3(-15,0,0)
+	var before: Vector3 = population.police[4].node.position
+	population.respond_to_tip("cafe",35.0)
+	_check(population.pursuit and population.police[4].alert>0.0 and population.police[0].alert==0.0,"a location tip dispatches the correct jurisdiction's nearest patrol")
+	_check(population.police[4].node.position==before and game.status=="playing","tip dispatch keeps officers at their actual positions and requires a physical pursuit")
+	player.position = Vector3(20,0.2,49)
+	for tick in 90:
+		population._update_police(1.0/60.0,false)
+		if tick%30==0: await physics_frame
+	_check(population.police[4].node.position.distance_to(cafe)<before.distance_to(cafe)-3.0,"dispatched city patrol physically checks its reported location after the student leaves for campus")
+	population.police[0].node.position = Vector3(0,0.2,49)
+	population.police[1].node.position = Vector3(0,0.2,51)
+	population.police[1].hp = 0.0
+	population.police[4].node.position = Vector3(0,0.2,50)
+	await physics_frame
+	_check(population.police_presence_count(Vector3(0,0.2,48),10.0)==1,"postponement police presence counts only visible living officers of the right jurisdiction")
+	population.reset_population()
+	population.set_physics_process(false)
+	_check(population.citizens[0].id==identity and population.citizens[0].name==identities[identity],"restart recreates stable identities for social persistence")
+	await physics_frame
