@@ -146,6 +146,7 @@ func _test_police() -> void:
 	_reset_crime()
 	player.position = Vector3(-2,0.2,48)
 	population.police[0].node.position = Vector3(2,0.2,48)
+	population.police[0].node.rotation.y = population._heading(player.position-population.police[0].node.position)
 	var wall := StaticBody3D.new()
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
@@ -170,6 +171,7 @@ func _test_police() -> void:
 		if bool(car.get("police",false)): cruiser = car
 	var cruiser_start: Vector3 = cruiser.node.position
 	cruiser.node.position = player.position+Vector3(8,0,0)
+	cruiser.node.rotation.y = population._heading(player.position-cruiser.node.position)
 	await physics_frame
 	game.report_crime(14.0)
 	_check(population.pursuit and float(population.police[4].alert)>0.0,"roaming cruiser witnesses a city crime and calls officers")

@@ -4,6 +4,7 @@ extends RefCounted
 
 var groups: Dictionary = {}
 var materials: Dictionary = {}
+const CHUNK_SIZE := 32.0
 
 func material(color: Color, glow: float = 0.0) -> StandardMaterial3D:
 	var key := color.to_html() + str(glow)
@@ -47,15 +48,24 @@ func cylinder(position: Vector3, radius: float, height: float, color: Color) -> 
 func flush(parent: Node3D) -> void:
 	for key in groups:
 		var entry: Dictionary = groups[key]
-		var multimesh := MultiMesh.new()
-		multimesh.transform_format = MultiMesh.TRANSFORM_3D
-		multimesh.mesh = entry.mesh
-		multimesh.instance_count = entry.transforms.size()
-		for index in entry.transforms.size():
-			multimesh.set_instance_transform(index, entry.transforms[index])
-		var instance := MultiMeshInstance3D.new()
-		instance.name = "CityDetails_" + key
-		instance.multimesh = multimesh
-		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if entry.casts_shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		parent.add_child(instance)
+		# A citywide MultiMesh has one enormous visibility bound. Small spatial
+		# batches allow the renderer to reject offscreen paint, paving and trim.
+		var chunks: Dictionary = {}
+		for transform: Transform3D in entry.transforms:
+			var cell := Vector2i(floori(transform.origin.x/CHUNK_SIZE),floori(transform.origin.z/CHUNK_SIZE))
+			if not chunks.has(cell): chunks[cell]=[]
+			chunks[cell].append(transform)
+		for cell: Vector2i in chunks:
+			var transforms: Array=chunks[cell]
+			var multimesh := MultiMesh.new()
+			multimesh.transform_format = MultiMesh.TRANSFORM_3D
+			multimesh.mesh = entry.mesh
+			multimesh.instance_count = transforms.size()
+			for index in transforms.size():
+				multimesh.set_instance_transform(index, transforms[index])
+			var instance := MultiMeshInstance3D.new()
+			instance.name = "CityDetails_%s_%d_%d" % [key,cell.x,cell.y]
+			instance.multimesh = multimesh
+			instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if entry.casts_shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			parent.add_child(instance)
 	groups.clear()

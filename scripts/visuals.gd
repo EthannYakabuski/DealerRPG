@@ -101,6 +101,9 @@ static func ground_ring(color: Color, radius: float = 0.8) -> MeshInstance3D:
 	mesh.ring_segments = 6
 	node.mesh = mesh
 	node.material_override = material(color, true)
+	# These flat, unshaded markers read as painted ground indicators.
+	# Their actors retain shadows; the marker itself need not enter shadow passes.
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	node.scale.y = 0.09
 	node.position.y = 0.09
 	return node

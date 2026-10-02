@@ -58,7 +58,7 @@ Milo's first follow-up arrives about ninety game minutes after saving his number
 - Relationships affected by punctuality, price, quality, cancellation and no-shows.
 - Three suppliers with different reputation gates, prices, stock quality and bust risk.
 - A finite backpack, food, energy, skateboard, late-game firearm/ammunition and owned car.
-- Campus security and city police with visibility-based detection, pursuit, escape and hardcore arrest.
+- Campus security and city police with a forward view cone, close-range awareness, pursuit, escape and hardcore arrest. Ordinary handoffs must be visible: patrols see within a 110-degree cone, or within three metres from any direction, and walls always block their view. Informant reports and planned stings can still dispatch police.
 - Animated pedestrians, spaced social groups, daily destination changes, flowing road traffic, a roaming police cruiser and parked vehicles. Moving traffic can injure you and knock you off your board.
 - Live meeting countdowns, clickable directions, transaction pop-ups and original sounds for packing, sales, purchases, texts and police events.
 - Vehicle theft, recognizable stolen cars, on-foot melee and ranged combat reactions.

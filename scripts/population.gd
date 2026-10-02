@@ -12,6 +12,8 @@ const Trips = preload("res://scripts/city_car_trips.gd")
 const Emotes = preload("res://scripts/npc_emote.gd")
 const GROUP_SPACING: float = 1.75
 const PEDESTRIAN_CLEARANCE: float = 1.5
+const POLICE_CLOSE_AWARENESS: float = 3.0
+const POLICE_VIEW_COSINE: float = 0.573576436 # cos(55 degrees): a 110-degree forward cone.
 var world: Node3D
 var player: StudentPlayer
 var citizens: Array[Dictionary] = []
@@ -283,7 +285,7 @@ func _update_citizen(citizen: Dictionary, delta: float, indoor: bool) -> void:
 		return
 	if float(citizen.panic) > 0.0:
 		citizen.panic = maxf(0.0,float(citizen.panic)-delta)
-		var away: Vector3 = actor.position-crime_position
+		var away: Vector3 = actor.position-Vector3(citizen.get("panic_source",crime_position))
 		away.y = 0.0
 		if away.length_squared() < 0.01: away = Vector3.RIGHT
 		var escape_target: Vector3 = actor.position+away.normalized()*9.0
@@ -455,7 +457,7 @@ func _update_police(delta: float, indoor: bool) -> void:
 			continue
 		var distance := _horizontal_distance(actor.position,player.position)
 		var jurisdiction := bool(officer.campus) == player_on_campus
-		var can_see := not indoor and jurisdiction and distance < (28.0 if pursuit else 19.0) and _line_of_sight(actor.position,player.position)
+		var can_see := not indoor and jurisdiction and _police_can_see(actor,player.global_position,28.0 if pursuit else 19.0)
 		if stolen_vehicle and player.vehicle and can_see and not pursuit:
 			crime_position = player.position
 			_begin_pursuit("STOLEN VEHICLE IDENTIFIED — break line of sight to escape.")
@@ -498,8 +500,22 @@ func _update_police(delta: float, indoor: bool) -> void:
 func _cruiser_sees_player() -> bool:
 	for car: Dictionary in vehicles:
 		if not bool(car.get("police",false)) or car.occupied or car.stolen: continue
-		if _horizontal_distance(car.node.position,player.position)<22.0 and _line_of_sight(car.node.position,player.position): return true
+		if _police_can_see(car.node,player.global_position,22.0): return true
 	return false
+
+func _police_can_see(observer: Node3D, target: Vector3, sight_range: float) -> bool:
+	var relative := target-observer.global_position
+	relative.y = 0.0
+	var squared := relative.length_squared()
+	if squared >= sight_range*sight_range: return false
+	if squared > POLICE_CLOSE_AWARENESS*POLICE_CLOSE_AWARENESS:
+		# Both supplied characters and cars face local +Z. Read the displayed
+		# heading, not the next route waypoint (which can be around a corner).
+		var forward := observer.global_basis.z
+		forward.y = 0.0
+		if forward.normalized().dot(relative.normalized()) < POLICE_VIEW_COSINE: return false
+	# Even the close-awareness exception cannot see through a solid wall.
+	return _line_of_sight(observer.global_position,target)
 
 func _alert_city_officers() -> void:
 	for officer: Dictionary in police:
@@ -616,27 +632,35 @@ func _is_campus(at: Vector3) -> bool:
 
 func on_crime(severity: float) -> void:
 	if not player or Game.status != "playing": return
-	crime_position = player.position
-	crime_age = 0.0
 	if severity >= 25.0:
 		for citizen: Dictionary in citizens:
-			if citizen.node.position.distance_to(player.position)<16.0 and _line_of_sight(citizen.node.position,player.position): citizen.panic = 6.0
+			if citizen.node.position.distance_to(player.position)<16.0 and _line_of_sight(citizen.node.position,player.position):
+				citizen.panic = 6.0
+				citizen.panic_source = player.position
 	var campus := _is_campus(player.position)
 	if not campus and _cruiser_sees_player():
+		crime_position = player.position
+		crime_age = 0.0
 		_begin_pursuit("SPOTTED — a road patrol called the deal in.")
 		_alert_city_officers()
 	var nearest: Dictionary = {}
 	var best := INF
 	for officer: Dictionary in police:
-		if float(officer.hp)<=0.0 or bool(officer.get("retiring",false)) or bool(officer.campus)!=campus: continue
+		if float(officer.hp)<=0.0 or float(officer.stun)>0.0 or bool(officer.get("retiring",false)) or bool(officer.campus)!=campus: continue
 		var distance: float = officer.node.position.distance_to(player.position)
 		if distance<best:
 			nearest = officer
 			best = distance
-		if distance<19.0 and _line_of_sight(officer.node.position,player.position):
+		if _police_can_see(officer.node,player.global_position,19.0):
+			crime_position = player.position
+			crime_age = 0.0
 			officer.alert = 12.0
 			_begin_pursuit("SPOTTED — break line of sight and stay hidden to escape.")
 	if severity>=65.0 and not nearest.is_empty():
+		# Gunfire and reported stings dispatch to a known location independently
+		# of visual witnessing. Unseen ordinary handoffs never update that point.
+		crime_position = player.position
+		crime_age = 0.0
 		nearest.alert = 15.0
 		_begin_pursuit("POLICE RESPONDING — a patrol is checking the area.")
 

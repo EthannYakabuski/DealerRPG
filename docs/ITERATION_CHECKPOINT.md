@@ -1,5 +1,11 @@
 # Living-city iteration checkpoint — 2026-10-02
 
+## Follow-up: police perception and performance
+
+Implementation and local verification complete; publishing pending. New police logic in population.gd uses a 110-degree forward cone and a 3 m near-awareness exception, always requiring wall line of sight. It applies to cruisers, handoffs, stolen-car identification and pursuit. Unseen handoffs preserve the last known chase position; reported stings and gunfire dispatch independently. The full build passed 808 counted checks plus world audits and exported 40.5 MB. Native batch readback passed four additional transform checks. Final browser gameplay and three benchmark samples passed without script errors.
+
+world_batch.gd now groups primitive details in 32 m spatial chunks; ActorVisuals ground rings no longer cast shadows. Native controlled profiles show 31.5–36.6% fewer submitted primitives across three exterior districts without reducing population or simulation. Batch tests pass5 headless/9 native. Profiler is tools/profile_runtime.gd; measurements are build/logs/runtime-profile-{baseline,chunk32,final}.json. Browser baseline was variable (26.9/14.3/27.6 FPS; final26.8/28.1/28.6), so avoid claiming an FPS percentage gain. Root owns local server PID92484; original Godot PID55824 belongs to the user and must remain untouched. QA browser closed. Remaining: commit/push, exact-SHA CI/Pages check, public browser check and server cleanup. User has reset externally; no credit was redeemed by the agent.
+
 Completed release: `2931d27880c4051e200e7b88cac5508ffe201c53` on main; https://ethannyakabuski.github.io/DealerRPG/. Prior release: `525c717`.
 User requests A–N: varied ambiguous street responses; intuitive controller supplier quantities/confirmation; aligned crossings; additional outskirts walkers and patrols; clear sidewalks; physical apartment parties 17:00–02:00 with optional individual sales; repeat-location police pressure; escalating hide times 10,10,15,20,25,30,+10; extra patrol expiry after a quiet day; NPC parking/car trips; slow skateboarding on grass; supplied NPC emotes.
 
