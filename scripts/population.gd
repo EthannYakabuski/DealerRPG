@@ -6,6 +6,10 @@ signal informant_reported(npc_id: String)
 const PERSON_LAYER: int = 4
 const VEHICLE_LAYER: int = 8
 const NAV_CELL: float = 2.0
+const BASE_POLICE_COUNT := 10
+const CITIZEN_COUNT := 57
+const Trips = preload("res://scripts/city_car_trips.gd")
+const Emotes = preload("res://scripts/npc_emote.gd")
 const GROUP_SPACING: float = 1.75
 const PEDESTRIAN_CLEARANCE: float = 1.5
 var world: Node3D
@@ -32,6 +36,8 @@ var navigation := AStarGrid2D.new()
 var _last_schedule_hour := -1
 var _active_conversation := ""
 var _citizens_by_id: Dictionary = {}
+var car_trips: RefCounted
+var _pressure_timer := 0.0
 
 func setup(city: Node3D, student: StudentPlayer) -> void:
 	world = city
@@ -40,10 +46,10 @@ func setup(city: Node3D, student: StudentPlayer) -> void:
 	rng.seed = 87261
 	_build_navigation()
 	var routes: Array = world.pedestrian_routes
-	for index in range(42):
+	for index in range(CITIZEN_COUNT):
 		if routes.is_empty(): break
 		var group_id: int = index / 3
-		var route: PackedVector3Array = routes[group_id % routes.size()]
+		var route: PackedVector3Array = routes[group_id % routes.size()] if index<42 else world.outskirts_routes[(index-42)/3]
 		if route.size() < 2: continue
 		var names := ["character-female-a","character-male-d","character-female-e","character-male-b","character-female-f","character-male-e"]
 		var actor := _person(names[index % names.size()],1.7+rng.randf_range(-0.08,0.14))
@@ -60,11 +66,11 @@ func setup(city: Node3D, student: StudentPlayer) -> void:
 		citizen.reported = false
 		citizen.report_retry = 0.0
 		_citizens_by_id[identity] = citizen
-	for index in range(7):
-		var campus := index < 4
+	for index in range(BASE_POLICE_COUNT):
+		var campus := index < 4 or index in [7,9]
 		var patrols: Array = world.campus_police_routes if campus else world.city_police_routes
 		if patrols.is_empty(): continue
-		var route: PackedVector3Array = patrols[index % patrols.size()]
+		var route: PackedVector3Array = patrols[index%(3 if campus else 2)] if index<7 else (world.campus_police_routes[3] if index==7 else (world.city_police_routes[2] if index==8 else world.campus_police_routes[4]))
 		if route.size() < 2: continue
 		var actor := _person("character-male-c",1.9)
 		var spawn: Dictionary = _sample_route(route,0.16+float(index % 4)*0.20)
@@ -90,7 +96,9 @@ func setup(city: Node3D, student: StudentPlayer) -> void:
 		var body := _vehicle(str(spawn.get("model","sedan")))
 		body.position = spawn.position
 		body.rotation.y = float(spawn.rotation)
-		vehicles.append({"node":body,"route":PackedVector3Array(),"index":0,"speed":0.0,"parked":true,"stolen":false,"occupied":false,"wait":0.0,"stuck":0.0})
+		vehicles.append({"node":body,"route":PackedVector3Array(),"index":0,"speed":0.0,"parked":true,"stolen":false,"occupied":false,"wait":0.0,"stuck":0.0,"lot":int(spawn.get("lot",-1))})
+	car_trips = Trips.new()
+	car_trips.setup(self)
 	friend = _person("character-male-d",1.8)
 	friend.position = Vector3(23,0.2,49)
 	var tag := ActorVisuals.label("MILO",Color("d5f276"),24)
@@ -126,11 +134,14 @@ func reset_population() -> void:
 	stolen_vehicle = false
 	crime_age = 1000.0
 	_last_schedule_hour = -1
+	_pressure_timer = 0.0
+	car_trips = null
 	player.reset_travel()
 	setup(world,player)
 
 func _person(asset: String, height: float) -> CharacterBody3D:
 	var person := CharacterBody3D.new()
+	person.set_meta("asset",asset)
 	person.collision_layer = PERSON_LAYER
 	person.collision_mask = 1
 	var shape := CollisionShape3D.new()
@@ -157,13 +168,16 @@ func _ground_person(actor: Node3D) -> void:
 	else:
 		var parts: Array[Dictionary] = []
 		for child: Node in actor.get_children():
-			if child is Node3D and not child is CollisionShape3D:
+			if child is Node3D and not child is CollisionShape3D and child.name!="NPCEmote":
 				parts.append({"node":child,"base_y":child.position.y})
 		cached = {"parts":parts}
 		_grounding_cache[id] = cached
 	var support: float = world.walkable_support_height(at,0.24)
 	var lift := support-at.y
-	for part: Dictionary in cached.parts: part.node.position.y = float(part.base_y)+lift
+	for part: Dictionary in cached.parts:
+		if is_instance_valid(part.node): part.node.position.y = float(part.base_y)+lift
+	var bubble := actor.get_node_or_null("NPCEmote")
+	if bubble: bubble.position.y = 3.25+lift
 	cached.position = at
 
 func _refresh_neighbor_lists() -> void:
@@ -190,6 +204,7 @@ func _refresh_neighbor_lists() -> void:
 
 func _vehicle(asset: String) -> AnimatableBody3D:
 	var body := AnimatableBody3D.new()
+	body.set_meta("asset",asset)
 	body.sync_to_physics = false
 	body.collision_layer = VEHICLE_LAYER
 	body.collision_mask = 0
@@ -212,6 +227,11 @@ func _physics_process(delta: float) -> void:
 	if _neighbor_refresh<=0.0:
 		_refresh_neighbor_lists()
 		_neighbor_refresh = 0.1
+	_pressure_timer -= delta
+	if _pressure_timer<=0.0:
+		_sync_pressure_patrols()
+		_pressure_timer = 2.0
+	if car_trips: car_trips.update(delta)
 	for citizen: Dictionary in citizens:
 		_update_citizen(citizen,delta,indoor)
 	_update_traffic(delta,indoor)
@@ -231,6 +251,7 @@ func _physics_process(delta: float) -> void:
 		_update_citizen_schedule()
 
 func _update_citizen(citizen: Dictionary, delta: float, indoor: bool) -> void:
+	if bool(citizen.get("party_guest",false)): return
 	var actor: CharacterBody3D = citizen.node
 	_ground_person(actor)
 	if float(citizen.hp) <= 0.0:
@@ -238,10 +259,17 @@ func _update_citizen(citizen: Dictionary, delta: float, indoor: bool) -> void:
 		actor.visible = not indoor and float(citizen.dead_seconds) < 25.0
 		actor.collision_layer = 0
 		return
+	if citizen.get("car_trip","")=="driving":
+		_set_person_visible(actor,false)
+		actor.collision_layer = 0
+		return
 	_set_person_visible(actor,not indoor and actor.position.distance_squared_to(player.position) < 8100.0)
 	actor.collision_layer = PERSON_LAYER if actor.visible else 0
 	if bool(citizen.get("reporting",false)):
 		_update_informant(citizen,delta)
+		return
+	if citizen.get("car_trip","")=="walking_to_car":
+		car_trips.walk_to_car(citizen,delta)
 		return
 	if not actor.visible: return
 	if citizen.has("name_label"):
@@ -409,6 +437,7 @@ func _update_police(delta: float, indoor: bool) -> void:
 	var player_on_campus := _is_campus(player.position)
 	if not indoor and not player_on_campus and _cruiser_sees_player():
 		if stolen_vehicle and player.vehicle and not pursuit:
+			crime_position = player.position
 			_begin_pursuit("STOLEN VEHICLE IDENTIFIED — a road patrol called it in.")
 			_alert_city_officers()
 		if pursuit: seen = true
@@ -418,6 +447,9 @@ func _update_police(delta: float, indoor: bool) -> void:
 		actor.visible = not indoor
 		actor.collision_layer = PERSON_LAYER if actor.visible and float(officer.hp)>0.0 else 0
 		if float(officer.hp) <= 0.0: continue
+		if bool(officer.get("retiring",false)):
+			if officer.get("retire_target",Vector3.INF).is_finite(): _move_person(officer,officer.retire_target,2.3,delta)
+			continue
 		if float(officer.stun) > 0.0:
 			officer.stun = maxf(0.0,float(officer.stun)-delta)
 			continue
@@ -425,6 +457,7 @@ func _update_police(delta: float, indoor: bool) -> void:
 		var jurisdiction := bool(officer.campus) == player_on_campus
 		var can_see := not indoor and jurisdiction and distance < (28.0 if pursuit else 19.0) and _line_of_sight(actor.position,player.position)
 		if stolen_vehicle and player.vehicle and can_see and not pursuit:
+			crime_position = player.position
 			_begin_pursuit("STOLEN VEHICLE IDENTIFIED — break line of sight to escape.")
 			officer.alert = 12.0
 			crime_position = player.position
@@ -455,7 +488,7 @@ func _update_police(delta: float, indoor: bool) -> void:
 	if arrest_seconds >= 2.3:
 		Game.caught_by_police()
 		return
-	if escape_seconds >= 10.0:
+	if escape_seconds >= Game.escape_duration_seconds():
 		pursuit = false
 		arrest_seconds = 0.0
 		for officer: Dictionary in police: officer.alert = 0.0
@@ -474,6 +507,10 @@ func _alert_city_officers() -> void:
 
 func _begin_pursuit(message: String) -> void:
 	if not pursuit:
+		Game.register_pursuit(_closest_incident_location(crime_position))
+		for officer: Dictionary in police:
+			if officer.node.visible and officer.node.position.distance_squared_to(player.position)<900.0: _emote(officer.node,"alert")
+		_pressure_timer = 0.0
 		Game.notification.emit(message)
 		if Game.has_signal("feedback_event"): Game.emit_signal("feedback_event","detected",0.0)
 	pursuit = true
@@ -513,18 +550,27 @@ func _move_person(record: Dictionary, target: Vector3, speed: float, delta: floa
 	var wall_contact := false
 	for collision_index in actor.get_slide_collision_count():
 		if absf(actor.get_slide_collision(collision_index).get_normal().y)<0.5: wall_contact = true
-	if wall_contact or not _line_of_sight(actor.position,target):
-		var old_target: Vector3 = record.nav_target
-		if float(record.nav_timer)<=0.0 or old_target.distance_squared_to(target)>25.0:
-			var points: PackedVector2Array = navigation.get_point_path(_nearest_open_cell(actor.position),_nearest_open_cell(target))
-			var route := PackedVector3Array()
-			for point: Vector2 in points: route.append(Vector3(point.x,0.15,point.y))
-			record.nav_path = route
-			record.nav_index = 1 if route.size()>1 else 0
-			record.nav_target = target
-			record.nav_timer = 1.5
-		var route: PackedVector3Array = record.nav_path
-		var path_index: int = int(record.nav_index)
+	var route: PackedVector3Array = record.nav_path
+	var path_index := int(record.nav_index)
+	var following := path_index<route.size()
+	var old_target: Vector3 = record.nav_target
+	if old_target.is_finite() and old_target.distance_squared_to(target)>25.0:
+		following = false
+		record.nav_path = PackedVector3Array()
+	# Once a detour starts, finish its waypoints. A centre ray clearing a corner
+	# is not clearance for the whole capsule; dropping the route there makes a
+	# walker repeatedly cut the corner, collide, and replan backwards.
+	if not following and (wall_contact or not _line_of_sight(actor.position,target)):
+		var points: PackedVector2Array = navigation.get_point_path(_nearest_open_cell(actor.position),_nearest_open_cell(target))
+		route = PackedVector3Array()
+		for point: Vector2 in points: route.append(Vector3(point.x,0.15,point.y))
+		path_index = 1 if route.size()>1 else 0
+		record.nav_path = route
+		record.nav_index = path_index
+		record.nav_target = target
+		record.nav_timer = 1.5
+		following = path_index<route.size()
+	if following:
 		while path_index<route.size() and _horizontal_distance(actor.position,route[path_index])<0.65: path_index += 1
 		record.nav_index = path_index
 		if path_index<route.size(): destination = route[path_index]
@@ -535,7 +581,7 @@ func _move_person(record: Dictionary, target: Vector3, speed: float, delta: floa
 		ActorVisuals.play(actor,"idle")
 		return
 	direction = direction.normalized()
-	if not record.has("campus"):
+	if record.has("neighbors"):
 		var separation := Vector3.ZERO
 		for other: CharacterBody3D in record.get("neighbors",[]):
 			if not is_instance_valid(other) or not other.visible or other.collision_layer==0: continue
@@ -582,7 +628,7 @@ func on_crime(severity: float) -> void:
 	var nearest: Dictionary = {}
 	var best := INF
 	for officer: Dictionary in police:
-		if float(officer.hp)<=0.0 or bool(officer.campus)!=campus: continue
+		if float(officer.hp)<=0.0 or bool(officer.get("retiring",false)) or bool(officer.campus)!=campus: continue
 		var distance: float = officer.node.position.distance_to(player.position)
 		if distance<best:
 			nearest = officer
@@ -595,7 +641,7 @@ func on_crime(severity: float) -> void:
 		_begin_pursuit("POLICE RESPONDING — a patrol is checking the area.")
 
 func _civilian_name(index: int) -> String:
-	var names := ["Avery Chen","Jordan Patel","Casey Brooks","Riley Tremblay","Morgan Lee","Sam Wilson","Rowan Ali","Charlie Martin","Quinn Park","Taylor Scott","Cameron Roy","Alex Singh","Jamie Young","Drew Nguyen","Skyler Reed","Emery Clarke","Noah Hassan","Maya Turner","Leo Bennett","Zoe Wright","Luca Moreau","Ella Davis","Owen Clark","Nina Ibrahim","Evan Walsh","Aria Roberts","Miles Kim","Lily Santos","Theo Brown","Sara Ahmed","Jules Murphy","Ivy Green","Max Laurent","Eva Phillips","Finn Walker","Leah Adams","Rory Bell","Mia Grant","Jesse Moore","Ada Lewis","Remy Baker","Sasha Hill"]
+	var names := ["Avery Chen","Jordan Patel","Casey Brooks","Riley Tremblay","Morgan Lee","Sam Wilson","Rowan Ali","Charlie Martin","Quinn Park","Taylor Scott","Cameron Roy","Alex Singh","Jamie Young","Drew Nguyen","Skyler Reed","Emery Clarke","Noah Hassan","Maya Turner","Leo Bennett","Zoe Wright","Luca Moreau","Ella Davis","Owen Clark","Nina Ibrahim","Evan Walsh","Aria Roberts","Miles Kim","Lily Santos","Theo Brown","Sara Ahmed","Jules Murphy","Ivy Green","Max Laurent","Eva Phillips","Finn Walker","Leah Adams","Rory Bell","Mia Grant","Jesse Moore","Ada Lewis","Remy Baker","Sasha Hill","Dakota Price","Elliot Adams","Harper Quinn","Kai Moore","Logan Bell","Parker Liu","Reese Dubois","Sydney Khan","Jaden Ellis","Blair Ross","Cleo James","Nico Taylor","Tessa Grey","Robin Cook","Dylan Fox"]
 	return names[posmod(index,names.size())]
 
 func nearest_conversational_npc(radius: float = 3.2) -> Dictionary:
@@ -607,7 +653,7 @@ func nearest_conversational_npc(radius: float = 3.2) -> Dictionary:
 	var closest: Dictionary = {}
 	var distance := radius*radius
 	for citizen: Dictionary in citizens:
-		if float(citizen.hp)<=0.0 or bool(citizen.reporting) or bool(citizen.reported) or float(citizen.panic)>0.0 or float(citizen.stun)>0.0: continue
+		if bool(citizen.get("party_guest",false)) or citizen.get("car_trip","")=="driving" or float(citizen.hp)<=0.0 or bool(citizen.reporting) or bool(citizen.reported) or float(citizen.panic)>0.0 or float(citizen.stun)>0.0: continue
 		var separation: float = citizen.node.position.distance_squared_to(player.position)
 		if separation<distance and _line_of_sight(citizen.node.position,player.position):
 			distance = separation
@@ -617,7 +663,7 @@ func nearest_conversational_npc(radius: float = 3.2) -> Dictionary:
 func begin_conversation(id: String) -> bool:
 	if not _citizens_by_id.has(id): return false
 	var citizen: Dictionary = _citizens_by_id[id]
-	if float(citizen.hp)<=0.0 or citizen.reporting or citizen.reported or citizen.node.position.distance_to(player.position)>3.5 or not _line_of_sight(citizen.node.position,player.position): return false
+	if bool(citizen.get("party_guest",false)) or citizen.get("car_trip","")=="driving" or float(citizen.hp)<=0.0 or citizen.reporting or citizen.reported or citizen.node.position.distance_to(player.position)>3.5 or not _line_of_sight(citizen.node.position,player.position): return false
 	end_conversation()
 	_active_conversation = id
 	citizen.conversation = true
@@ -667,6 +713,7 @@ func start_informant_run(id: String) -> bool:
 	label.text = "CALLING FOR HELP!"
 	label.modulate = Color("ff927d")
 	label.visible = true
+	_emote(citizen.node,"angry")
 	Game.notification.emit("%s is running to report you to a patrol."%citizen.name)
 	return true
 
@@ -675,7 +722,7 @@ func _nearest_officer_index(at: Vector3, campus: bool) -> int:
 	var nearest := INF
 	for index in police.size():
 		var officer: Dictionary = police[index]
-		if float(officer.hp)<=0.0 or bool(officer.campus)!=campus: continue
+		if float(officer.hp)<=0.0 or bool(officer.get("retiring",false)) or bool(officer.campus)!=campus: continue
 		var distance: float = officer.node.position.distance_squared_to(at)
 		if distance<nearest:
 			nearest = distance
@@ -747,7 +794,7 @@ func police_presence_count(at: Vector3, radius: float = 24.0) -> int:
 	var count := 0
 	var campus := _is_campus(at)
 	for officer: Dictionary in police:
-		if float(officer.hp)>0.0 and bool(officer.campus)==campus and officer.node.position.distance_squared_to(at)<radius*radius and _line_of_sight(officer.node.position,at): count += 1
+		if float(officer.hp)>0.0 and not bool(officer.get("retiring",false)) and bool(officer.campus)==campus and officer.node.position.distance_squared_to(at)<radius*radius and _line_of_sight(officer.node.position,at): count += 1
 	if not campus:
 		for car: Dictionary in vehicles:
 			if bool(car.get("police",false)) and not car.occupied and not car.stolen and car.node.position.distance_squared_to(at)<radius*radius and _line_of_sight(car.node.position,at): count += 1
@@ -771,7 +818,7 @@ func nearby_vehicle() -> Dictionary:
 	var best := 4.2
 	for car: Dictionary in vehicles:
 		var distance: float = car.node.position.distance_to(player.position)
-		if distance<best and not car.occupied and _line_of_sight(player.position,car.node.position):
+		if distance<best and not car.occupied and not bool(car.get("npc_driver",false)) and _line_of_sight(player.position,car.node.position):
 			nearest = car
 			best = distance
 	return nearest
@@ -877,15 +924,15 @@ func restore_meeting_state(saved: Array) -> void:
 
 func capture_pursuit_state() -> Dictionary:
 	var officers: Array[Dictionary] = []
-	for officer: Dictionary in police:
+	for officer: Dictionary in police.slice(0,BASE_POLICE_COUNT):
 		var at: Vector3 = officer.node.position
 		officers.append({"position":[at.x,at.y,at.z],"hp":officer.hp,"alert":officer.alert,"stun":officer.stun,"index":officer.index})
 	return {"officers":officers,"arrest_seconds":arrest_seconds,"escape_seconds":escape_seconds,"crime_age":crime_age,"crime_position":[crime_position.x,crime_position.y,crime_position.z]}
 
 func restore_pursuit_state(state: Dictionary) -> void:
 	var officers: Array = state.get("officers",[])
-	if officers.size()!=police.size(): return
-	for index in police.size():
+	if officers.size() not in [7,BASE_POLICE_COUNT]: return
+	for index in officers.size():
 		var saved: Dictionary = officers[index]
 		var at: Array = saved.position
 		police[index].node.position = Vector3(float(at[0]),float(at[1]),float(at[2]))
@@ -984,6 +1031,8 @@ func _sync_meetings() -> void:
 		if _point_offscreen(record.node.position):
 			_remove_meeting_actor(id)
 			continue
+		for meeting: Dictionary in Game.meetings:
+			if str(int(meeting.id))==id and meeting.status=="missed": _emote(record.node,"sad")
 		var exit := _offscreen_walk_point(record.node.position)
 		if not exit.is_finite(): continue
 		record.state = "departing"
@@ -1133,3 +1182,98 @@ func _set_person_visible(actor: Node3D, show_actor: bool) -> void:
 	var model: Node = actor.get_meta("model",null)
 	if model:
 		model.process_mode = Node.PROCESS_MODE_INHERIT if show_actor and _model_in_camera_view(actor) else Node.PROCESS_MODE_DISABLED
+
+func _closest_incident_location(at: Vector3) -> String:
+	var closest := "campus_quad"
+	var distance := INF
+	var campus := _is_campus(at)
+	for id: String in world.landmarks:
+		var landmark: Vector3 = world.landmarks[id].position
+		if _is_campus(landmark)!=campus: continue
+		var gap := at.distance_squared_to(landmark)
+		if gap<distance:
+			distance = gap
+			closest = id
+	return closest
+
+func _sync_pressure_patrols() -> void:
+	var wanted: Dictionary = {}
+	var available := 8
+	for pressure: Dictionary in Game.police_pressure_locations():
+		var id: String = pressure.location_id
+		if not world.landmarks.has(id): continue
+		var count := mini(available,mini(4,int(pressure.strength)))
+		for number in count: wanted[id+":"+str(number)] = pressure
+		available -= count
+		if available<=0: break
+	for index in range(police.size()-1,BASE_POLICE_COUNT-1,-1):
+		var officer: Dictionary = police[index]
+		if wanted.has(officer.pressure_key): continue
+		if not _point_offscreen(officer.node.position):
+			if not bool(officer.retiring): officer.retire_target = _offscreen_patrol_point(officer.node.position,bool(officer.campus))
+			officer.retiring = true
+			continue
+		var actor: CharacterBody3D = officer.node
+		_grounding_cache.erase(actor.get_instance_id())
+		police.remove_at(index)
+		for record: Dictionary in _pedestrian_neighbors:
+			if record.has("neighbors"): record.neighbors.erase(actor)
+		actor.queue_free()
+	var spawned := 0
+	for key: String in wanted:
+		var exists := false
+		for officer: Dictionary in police:
+			if str(officer.get("pressure_key",""))==key:
+				officer.retiring = false
+				exists = true
+				break
+		if exists: continue
+		if spawned>=2 or police.size()>=BASE_POLICE_COUNT+8: break
+		var pressure: Dictionary = wanted[key]
+		var target: Vector3 = world.landmarks[pressure.location_id].position
+		var campus := _is_campus(target)
+		var start := _offscreen_patrol_point(target,campus)
+		if not start.is_finite(): continue
+		var actor := _person("character-male-c",1.9)
+		actor.position = start
+		var number := int(key.get_slice(":",1))
+		var shifted := _safe_pedestrian_target(start+Vector3(float(number%2)*2.0,0,float(number/2)*2.0))
+		if _point_offscreen(shifted) and _is_campus(shifted)==campus: actor.position = shifted
+		actor.add_child(ActorVisuals.ground_ring(Color("76b7dd") if campus else Color("668cff"),0.55))
+		var tag := ActorVisuals.label("CAMPUS PATROL" if campus else "CITY PATROL",Color("8ac2ef"),15)
+		tag.position.y = 2.3
+		actor.add_child(tag)
+		var route := PackedVector3Array()
+		for offset: Vector3 in [Vector3(-9,0,0),Vector3(0,0,9),Vector3(9,0,0),Vector3(0,0,-9)]:
+			var point := _safe_pedestrian_target(target+offset)
+			if _is_campus(point)==campus: route.append(point)
+		if route.size()<2: route = PackedVector3Array([target,target+Vector3(0,0,1)])
+		police.append({"node":actor,"route":route,"index":0,"campus":campus,"alert":0.0,"hp":150.0,"stun":0.0,"nav_path":PackedVector3Array(),"nav_index":0,"nav_target":Vector3.INF,"nav_timer":0.0,"dead_seconds":0.0,"pressure_key":key,"retiring":false})
+		spawned += 1
+		_ground_person(actor)
+	_refresh_neighbor_lists()
+
+func _emote(actor: Node3D, kind: String) -> void:
+	var bubble: Node3D = Emotes.play(actor,kind)
+	if bubble: bubble.position.y = 3.25+world.walkable_surface_height(actor.position)-actor.position.y
+
+func play_contact_emote(meeting_id: int, kind: String) -> void:
+	var key := str(meeting_id)
+	if meeting_actors.has(key): _emote(meeting_actors[key],kind)
+
+func play_citizen_emote(npc_id: String, kind: String) -> void:
+	if _citizens_by_id.has(npc_id): _emote(_citizens_by_id[npc_id].node,kind)
+
+func _offscreen_patrol_point(target: Vector3, campus: bool) -> Vector3:
+	var candidate := _offscreen_walk_point(target)
+	if candidate.is_finite() and _is_campus(candidate)==campus: return candidate
+	var result := Vector3.INF
+	var nearest := INF
+	var routes: Array = world.campus_police_routes if campus else world.city_police_routes
+	for route: PackedVector3Array in routes:
+		for point: Vector3 in route:
+			var distance := point.distance_squared_to(target)
+			if distance<nearest and _is_campus(point)==campus and _point_offscreen(point):
+				result = point
+				nearest = distance
+	return result

@@ -4,7 +4,7 @@
 
 ## Clock and world integration
 
-`minute` is absolute campaign minutes. Day one at 10:00 is `600`; day two at 09:00 is `1980`. `day_number()`, `time_text()`, `format_minute(value)`, `current_phase()` and `next_class_minute()` provide display helpers. The automatic clock runs at **3 game minutes per real second** after the tutorial. Set `paused = true` while an overlay is open; `advance_time()` still works for deliberate class/sleep/party actions.
+`minute` is absolute campaign minutes. Day one at 10:00 is `600`; day two at 09:00 is `1980`. `day_number()`, `time_text()`, `format_minute(value)`, `current_phase()` and `next_class_minute()` provide display helpers. The automatic clock runs at **3 game minutes per real second** after the tutorial. Set `paused = true` while an overlay is open; `advance_time()` still works for deliberate class/sleep actions. Live parties follow the ordinary clock.
 
 Set `player_location_id` from world proximity before calling contextual actions. Named locations: `campus_quad`, `library`, `cafe`, `home`, `market`, `car_park`. World interactions should separately require proximity to the actual NPC for tutorial/client handoffs. Movement, line of sight, pursuit and catch radius are world responsibilities.
 
@@ -14,9 +14,12 @@ Signals:
 - `notification(text: String)` — short user-facing feedback, including why a transaction failed.
 - `ended(won: bool, reason: String)` — terminal campaign result.
 - `crime_committed(severity: float)` — world witnesses decide whether to pursue. Minor handoff ~14, supplier setup 65, gunfire 65. Ordinary hidden crimes add small passive attention; this signal is **not** an automatic capture.
-- `feedback_event(kind: String, value: float)` — success-only sound and visual cues. Kinds: `pack`, `purchase`, `sale`, `text`, `caught`, `consume`, `tuition`, `class`, `party`. Transaction values are signed cash changes (party reports net proceeds after supplies); other values are zero. Loading a save and failed transactions never replay these cues.
+- `feedback_event(kind: String, value: float)` — success-only sound and visual cues. Kinds: `pack`, `purchase`, `sale`, `text`, `caught`, `consume`, `tuition`, `class`, `party`. Transaction values are signed cash changes: party supplies emit `purchase, -25`; each chosen guest sale emits `party, 24`. Other values are zero. Loading a save and failed transactions never replay these cues.
 - `civilian_reaction(npc_id: String, reaction: String)` — a pedestrian's `report` reaction asks the world to start their physical walk toward an officer. This signal does not increase heat or cause an arrest.
 - `police_tip(location_id: String, severity: float)` — a supplier setup or informant handoff provides a meeting location for an actual patrol response. The state warns the player and leaves pursuit, arrival and capture to the world.
+- `street_reaction(npc_id: String, kind: String)`, `meeting_reaction(meeting_id: int, kind: String)`, `party_reaction(contact_id: String, kind: String)` — semantic cosmetic reactions such as `wave`, `question`, `happy`, `sad`, or `angry`; they never trigger police behavior themselves.
+- `meeting_missed(meeting_id: int, contact_id: String)` — emitted once when a scheduled meeting expires, so the world can show an upset contact leaving.
+- `police_pressure_changed()` — local reinforcement changes; population can refresh its bounded temporary patrol roster.
 
 Call `set_heat(value)` for police attention, `take_damage(amount)` for injuries, and `caught_by_police()` for terminal arrest. `finish_game(won, reason)` is also available. An ended campaign rejects new transactions and persists its result; restarting resets everything.
 
@@ -57,6 +60,8 @@ Milo's first follow-up arrives 90 game minutes after the tutorial purchase. Subs
 
 `street_conversation(npc_id, npc_name)` creates or reads a stable pedestrian record and returns only public fields: `npc_id`, `name`, `text`, `can_offer`, `can_add_contact`, `sold`, `price`, `contact_id`. Root/world owns the physical conversation range. `offer_street_sale(npc_id)` can sell one bag for $22, receive a refusal, or emit a reporting reaction. Outcomes persist and cannot be rerolled by reopening the dialog. Successful sales apply a purchase cooldown; refusals impose four hours before another offer. `add_street_contact(npc_id)` works once after a successful sale and carries that sale's cooldown into the phone contact.
 
+`street_smalltalk(npc_id, goal = "") -> String` cycles through ordinary conversations and retains the latest reply. Dialogue voice is drawn independently from the hidden purchase outcome; a study-related line or an NPC's daily activity never reveals whether they will buy. Purchase, refusal and report replies also vary. Older records derive a stable voice from their ID.
+
 `pending_civilian_reports()` lists pedestrians still looking for an officer. Restore their physical journeys when continuing a game. When one reaches a living officer, the world calls `civilian_report_arrived(npc_id)` once and handles the ensuing pursuit itself. State only records completion, so there is no duplicate crime alert or immediate arrest.
 
 Referrals first appear in `pending_introductions()`, a public array containing `id`, `name`, `text`, `referrer_id`, `referrer_name`, `who_answer`, `connection_answer` and `status`. `ask_introduction(id, "referrer")` asks who gave out the number; `ask_introduction(id, "connection")` asks how they know that person. Compare the saved answers to `contact_profile(contact_id)`, which provides known `course`, `hangout` and `bio`. `resolve_introduction(id, "accept" | "decline" | "block")` makes the player's decision explicit. Acceptance adds a contact and an incoming opportunity; it does not schedule anything. Some informants have inconsistent cover and some have accurate cover, so questions provide clues rather than an infallible identity check. Hidden identity fields are omitted from public introduction/profile views. A hidden informant only sends a police tip after an actual chosen handoff.
@@ -76,8 +81,24 @@ All transaction methods return a success bool. Failed actions emit a notificatio
 - `pay_tuition(amount = -1)` — phone payment; default pays as much as affordable. Paying the full $3,500 wins.
 - `attend_class()` — `classroom` lecture hall, campus quad or library, 08:40–09:59; advances to 11:00. Day-one class is already complete. Three missed days cause eviction.
 - `sleep_at_home()` — home and heat ≤35; advances to next 08:10, restores energy and some health if fed. Obligations still advance.
-- `host_party()` — home, reputation 5, at least two contacts, 17:00–22:59, 6+ bags, $25 setup, once per day. Sells up to 24 bags based on circle size, advances 90 minutes, increases relationships/reputation and police attention.
+- `host_party()` — home, reputation 5, at least two contacts, 17:00–02:00, $25 supplies, once per night. Opens a live party without changing stock or advancing time; see the party APIs below.
 - `work_shift()` — classroom/campus/library, 11:00–19:00, heat ≤30; advances 120 minutes and earns $35. Recovery route if the player spent all seed money.
+
+## Live parties
+
+`party_summary()` returns `{active, id, start_minute, end_minute, ends_minute, guest_count, guests, can_invite}`; `ends_minute` aliases `end_minute`. Parties last up to 180 campaign minutes, always close by 02:00, and cannot start with less than 20 minutes remaining. Midnight belongs to the previous party night. Guests remain in the summary after closing so their world actors can depart.
+
+`invite_party_contact(contact_id)` invites up to eight known, unblocked contacts, with staggered `arrival_minute` values. Each guest has `contact_id`, `name`, `status` (`invited`, `inside`, `left`), `arrived`, `chatted` and `purchased`. An accepted meeting before party closing plus a 15-minute departure buffer prevents an invitation; answering an older text cannot create that conflict in the opposite order either. Later appointments remain available. Invited guests do not generate new sales errands or accept proactive outreach while the party is running. Invitations are social visits and do not sell inventory.
+
+Main's party actor helper owns physical movement, arrival and conversation distance. Once a guest has reached home after their arrival time, call `mark_party_guest_arrived(contact_id)` (alias `party_guest_arrived`) for the once-only +2 relationship award. `party_guest_view(contact_id)` exposes name, conversational text, `can_chat`, `can_offer`, `price` ($24) and `sold`. `chat_party_guest` (alias `party_chat`) gives +3 relationship once. `sell_party_guest` (alias `party_sell`) explicitly sells one bag once to that guest, awards revenue/reputation and applies the normal purchase cooldown. State requires the player at home; main also checks actual actor proximity. Guests never buy automatically when time advances or the party ends.
+
+## Local police pressure
+
+Completed appointments update `last_meeting_location` and `consecutive_location_meetings`. Two consecutive meetings at one place create watch level 1; three create heavy watch level 2. Changing locations resets the consecutive count but does not erase existing watch. Failed, cancelled, missed, duplicate and postponed handoffs do not increase it.
+
+Population calls `register_pursuit(location_id)` exactly once when a new pursuit begins. Each incident increases that area's reinforcement and the persisted global `pursuit_incidents` count. `escape_duration_seconds()` returns 10, 10, 15, 20, 25, 30 seconds for incidents 1–6, then 40, 50, 60 and another 10 seconds per incident. Quiet areas lose their extra patrols after 1,440 campaign minutes without a new bust; permanent escape escalation remains. Ordinary meetings do not extend that quiet-day deadline.
+
+`police_pressure_locations()` returns active `{location_id, expires_minute, strength, watch_level, incident_count}` records sorted by strength. Strength is watch level plus incident count, capped at `MAX_EXTRA_OFFICERS_PER_AREA` (4), and population limits the combined temporary roster to `MAX_VISIBLE_EXTRA_OFFICERS` (8). Incident counts and escape requirements keep increasing beyond the visible roster cap. Temporary patrols are rebuilt from this saved state; only the base roster is stored in pursuit actor snapshots.
 
 ## Persistence and tests
 
@@ -87,7 +108,9 @@ All transaction methods return a success bool. Failed actions emit a notificatio
 
 Optional `world_state.meeting_walks` validates up to ten client/supplier actor records. The world captures approaching and waiting actors for active appointments; completed departures are cosmetic and are not restored. Each record contains numeric `id`, exterior `position` and `target` arrays, `state`, and absolute `start_minute` / `due` times. Invalid entries and duplicate IDs are skipped independently; oversized or malformed containers are ignored. Missing data remains compatible with earlier saves.
 
-Optional `world_state.informant_runs` retains up to 42 reporting pedestrians as `{id, position, report_position, campus}`. IDs must be `citizen_00` through `citizen_41`; both positions must be finite and inside the exterior. Malformed or duplicate entries are skipped. New optional top-level `introductions`, `callbacks` and `street_npcs` are validated before a save is applied; older version-2 saves without them remain compatible.
+Optional `world_state.informant_runs` retains up to 57 reporting pedestrians as `{id, position, report_position, campus}`. IDs must be `citizen_00` through `citizen_56`; both positions must be finite and inside the exterior. Malformed or duplicate entries are skipped. Optional `world_state.party_walks` retains up to eight `{contact_id, state, position, slot}` records: `inside` requires the home room, `approaching` requires exterior bounds, and `leaving` permits either. Pursuit snapshots accept both legacy seven-officer and current ten-officer base rosters.
+
+Optional top-level `introductions`, `callbacks`, `street_npcs`, `active_party`, `police_pressure`, `pursuit_incidents`, `last_meeting_location` and `consecutive_location_meetings` are validated before a save is applied; older version-2 saves without them remain compatible. Live party guest awards and purchases persist to prevent duplicate transactions after reload. Already-expired parties and local patrol deadlines resolve quietly on load without replaying feedback.
 
 Existing daytime supplier appointments that are still live migrate to the next legal night slot without changing cash or stock. Only that supplier's obsolete saved walking record is removed; unrelated actors remain intact. Already-overdue appointments retain ordinary expiry behavior, and the load notification points the player to the updated agenda.
 
@@ -100,5 +123,7 @@ Run the integration suite with Godot 4.5.1:
 The suite checks tutorial ordering, scheduling, relationship penalties, inventory/quality, suppliers, hunger, classes, parties, cars, corrupted saves, irreversible loss, restart and a complete earned-money campaign. It uses a separate `.godot/gameplay-test-save.json`, never the player's save. For sandboxed desktop runs use an absolute forward-slash log path under the repository; Godot's default AppData log location may not be writable.
 
 `tests/test_social_state.gd` covers pedestrian sale/refusal/report branches, persistent reports, referral vetting and informant handoffs, proactive discounted opportunities, night-only suppliers, client/supplier/tomorrow callbacks, eight-hour scheduling, duplicate prevention and optional-save compatibility. Its isolated save is `.godot/social-test-save.json`.
+
+`tests/test_party_pressure.gd` covers live-party windows, invitations, arrival/chat/manual sale exclusivity, midnight limits, persistent guest outcomes, consecutive completed-meeting pressure, the escalation ladder, local expiry, missed-contact reactions, ambiguous dialogue, expanded patrol/report snapshots, malformed saves and optional-field migration.
 
 `tests/test_population.gd` instantiates the actual city, actors, collisions and navigation. It checks tutorial spawn spacing, animated models, day/night goals, building avoidance, first-sale witnesses, line-of-sight occlusion, patrol jurisdiction, persisted arrest, escape, reset, all five interiors, stamina, firearm visibility/ammunition, melee reactions, car theft/safe exits/ownership, timed NPC arrival and physical save positions. `CityPopulation.reset_population()` resets transient city simulation for a new or restored campaign; `StudentPlayer.reset_travel()` clears stale movement and vehicle state.

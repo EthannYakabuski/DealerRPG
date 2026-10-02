@@ -38,12 +38,15 @@ func _run() -> void:
 	await _test_police()
 	await _test_player()
 	await _test_surface_traversal()
+	await _test_corner_navigation()
 	await _test_vehicles()
 	await _test_traffic_impacts()
 	await _test_civilian_reports()
 	await _test_meetings()
 	await _test_dynamic_simulation()
 	await _test_traffic_endurance()
+	await _test_commuter_trips()
+	await _test_pressure_patrols()
 	_test_world_state_save()
 	scene.queue_free()
 	await process_frame
@@ -63,8 +66,8 @@ func _setup_inputs() -> void:
 		if not InputMap.has_action(action): InputMap.add_action(action)
 
 func _test_world_population() -> void:
-	_check(population.citizens.size()==42,"world has fourteen groups of three pedestrians")
-	_check(population.police.size()==7,"campus and city patrols spawn")
+	_check(population.citizens.size()==57,"world retains fourteen central groups and adds five outskirts groups")
+	_check(population.police.size()==10,"campus, city, and outskirts patrols spawn")
 	_check(population.vehicles.size()==12+world.parked_car_spawns.size(),"all world parking stall positions are populated")
 	var group: Dictionary = population.citizens[0]
 	_check(group.group==population.citizens[1].group and group.route==population.citizens[1].route,"friends share routes and purpose")
@@ -157,7 +160,7 @@ func _test_police() -> void:
 	wall.queue_free()
 	await physics_frame
 	population.pursuit = true
-	population.escape_seconds = 9.99
+	population.escape_seconds = game.escape_duration_seconds()-0.01
 	for officer: Dictionary in population.police: officer.node.position = Vector3(135,0.2,110)
 	population._update_police(0.05,false)
 	_check(not population.pursuit,"ten seconds out of sight escapes a pursuit")
@@ -259,7 +262,7 @@ func _test_surface_traversal() -> void:
 	Input.action_press("move_right")
 	var supported := true
 	var deck_support_peak := 0.0
-	for tick in range(120):
+	for tick in range(600):
 		player._physics_process(1.0/60.0)
 		var board_bounds: AABB = ActorVisuals.bounds_of(player.board)
 		var wheels: float = player.position.y+board_bounds.position.y
@@ -267,6 +270,7 @@ func _test_surface_traversal() -> void:
 		deck_support_peak = maxf(deck_support_peak,wheels)
 		if wheels<beneath-0.001: supported = false
 		if tick%20==0: await physics_frame
+		if player.position.x>44.0: break
 	Input.action_release("move_right")
 	_check(player.position.x>43.0,"skateboard crosses slab and island edges without getting blocked by new curbs")
 	_check(supported and deck_support_peak>0.24,"actual skateboard mesh remains above paving throughout traversal")
@@ -428,6 +432,8 @@ func _test_dynamic_simulation() -> void:
 	_check(population.vehicles[0].node.position.distance_to(car_start)>5.0,"traffic progresses during sustained simulation")
 
 func _test_traffic_endurance() -> void:
+	population.reset_population()
+	population.set_physics_process(false)
 	player.position = Vector3(600,0.2,0)
 	var movers: Array[Dictionary] = []
 	for car: Dictionary in population.vehicles:
@@ -513,7 +519,7 @@ func _test_civilian_reports() -> void:
 	var identity: String = citizen.id
 	var identities: Dictionary = {}
 	for record: Dictionary in population.citizens: identities[record.id] = record.name
-	_check(identities.size()==42 and identities.has("citizen_00") and identities.has("citizen_41"),"all ambient pedestrians have stable distinct social identities")
+	_check(identities.size()==57 and identities.has("citizen_00") and identities.has("citizen_56"),"all ambient pedestrians have stable distinct social identities")
 	for record: Dictionary in population.citizens: record.node.position = Vector3(130,0.2,-110)
 	citizen.node.position = Vector3(0,0.2,48)
 	player.position = Vector3(2,0.2,48)
@@ -583,3 +589,118 @@ func _test_civilian_reports() -> void:
 	population.set_physics_process(false)
 	_check(population.citizens[0].id==identity and population.citizens[0].name==identities[identity],"restart recreates stable identities for social persistence")
 	await physics_frame
+
+func _test_commuter_trips() -> void:
+	_reset_crime()
+	population.reset_population()
+	population.set_physics_process(false)
+	player.position = Vector3(20,0.2,50)
+	var manager: RefCounted = population.car_trips
+	_check(manager._assign_trip(),"an outskirts pedestrian can claim a nearby unowned parked car")
+	var first: Dictionary = manager.trips[0]
+	var id: String = first.id
+	var car: Dictionary = first.car
+	var start: Vector3 = car.node.position
+	var walker: Dictionary = population._citizens_by_id[id]
+	_check(int(id.substr(8))>=42 and walker.car_trip=="walking_to_car" and car.parked,"car trip starts with an added outskirts walker and preserves the original 42 pedestrians")
+	var original_walker: Vector3 = walker.node.position
+	var max_step := 0.0
+	var entered := false
+	var drove := false
+	var clear_walls := true
+	for tick in range(16000):
+		var before: Vector3 = walker.node.position
+		manager.update(1.0/60.0)
+		for trip: Dictionary in manager.trips:
+			if trip.stage=="walking": population._update_citizen(population._citizens_by_id[trip.id],1.0/60.0,false)
+		if walker.car_trip=="walking_to_car": max_step = maxf(max_step,walker.node.position.distance_to(before))
+		if walker.car_trip=="driving":
+			entered = true
+			if car.node.position.distance_to(start)>25.0: drove = true
+		population._update_traffic(1.0/60.0,false)
+		if tick%60==0:
+			population._refresh_neighbor_lists()
+			for rect: Rect2 in world.obstacle_rects:
+				if rect.grow(0.7).has_point(Vector2(car.node.position.x,car.node.position.z)): clear_walls = false
+		if tick%600==0: await physics_frame
+		if manager.completed_trips>=3: break
+	_check(entered and max_step<0.12 and original_walker.distance_to(start)>2.0,"commuter physically walks to its door before entering without teleporting across the lot")
+	_check(drove and clear_walls and manager.completed_trips>=3,"three commuter cars merge into existing roads, complete their routes and return without crossing buildings")
+	_check(car.parked and not car.npc_driver and car.node.position.distance_to(start)>3.0,"completed trip parks in a different vacant bay")
+	_check(walker.car_trip=="" and walker.node.position.distance_to(car.node.position)<4.0,"parked commuter exits the actual vehicle and resumes walking")
+	var slots_clear := true
+	for other: Dictionary in population.vehicles:
+		if other.node!=car.node and car.node.position.distance_to(other.node.position)<2.8: slots_clear = false
+	_check(slots_clear,"returned commuter occupies a clear bay without overlapping another car")
+	# A player may steal a reserved vehicle while its owner is walking toward it.
+	# That claim must be abandoned, and neither occupied nor owned cars are selected.
+	manager.assignment_timer = 9999.0
+	manager._assign_trip()
+	if not manager.trips.is_empty():
+		var pending: Dictionary = manager.trips.back()
+		pending.car.occupied = true
+		pending.car.stolen = true
+		player.vehicle = pending.car.node
+		var parked_position: Vector3 = pending.car.node.position
+		manager.update(1.0/60.0)
+		_check(not manager.trips.has(pending) and pending.car.node.position==parked_position and player.vehicle==pending.car.node,"player takeover cancels the approaching NPC without reclaiming or moving the stolen car")
+		player.vehicle = null
+	population.reset_population()
+	population.set_physics_process(false)
+	manager = population.car_trips
+	for parked: Dictionary in population.vehicles:
+		if parked.parked: parked.owned = true
+	_check(not manager._assign_trip(),"commuters never select player-owned vehicles")
+	await physics_frame
+
+func _test_pressure_patrols() -> void:
+	_reset_crime()
+	population.reset_population()
+	population.set_physics_process(false)
+	player.position = world.get_landmark("car_park")
+	population.crime_position = player.position
+	population._begin_pursuit("Test incident")
+	population._begin_pursuit("Same incident repeated")
+	_check(game.pursuit_incidents==1,"continuous sightings increment the chase count only once per pursuit")
+	for index in 3:
+		population.pursuit = false
+		population._begin_pursuit("New incident")
+	_check(game.pursuit_incidents==4 and game.escape_duration_seconds()==20.0,"separate chases escalate the required escape duration")
+	population.pursuit = false
+	for tick in 3: population._sync_pressure_patrols()
+	_check(population.police.size()==14,"repeated west parking incidents bring four additional real patrol officers")
+	var extras_offscreen := true
+	var extras_campus := true
+	for officer: Dictionary in population.police.slice(10):
+		if not population._point_offscreen(officer.node.position): extras_offscreen = false
+		if not bool(officer.campus): extras_campus = false
+	_check(extras_offscreen and extras_campus,"additional west parking patrols enter outside the view and use campus jurisdiction")
+	_check(population.capture_pursuit_state().officers.size()==10,"temporary hotspot units do not corrupt stable base-officer save slots")
+	var officer: Dictionary = population.police[10]
+	var start: Vector3 = officer.node.position
+	for tick in 360:
+		population._update_police(1.0/60.0,false)
+		if tick%60==0: await physics_frame
+	_check(officer.node.position.distance_to(start)>3.0,"reinforcement patrols physically walk into the watched area")
+	game.minute += 1441.0
+	player.position = Vector3(600,0.2,0)
+	population._sync_pressure_patrols()
+	_check(population.police.size()==10,"expired hotspot units leave the roster after a full game day")
+	_check(game.pursuit_incidents==4,"hotspot expiration does not erase the lifetime incident escalation")
+	await physics_frame
+
+func _test_corner_navigation() -> void:
+	player.position = world.get_landmark("home")
+	var walker: Dictionary = population.citizens[0]
+	walker.node.position = Vector3(80.67944,0.2,-63.9798)
+	walker.nav_path = PackedVector3Array()
+	walker.nav_index = 0
+	walker.nav_target = Vector3.INF
+	walker.neighbors = []
+	var target: Vector3 = world.get_landmark("home")
+	await physics_frame
+	for tick in 900:
+		population._move_person(walker,target,2.5,1.0/60.0)
+		if tick%60==0: await physics_frame
+		if population._horizontal_distance(walker.node.position,target)<1.0: break
+	_check(population._horizontal_distance(walker.node.position,target)<1.0,"a walker follows its detour around the apartment corner instead of recutting it when centre LOS clears")

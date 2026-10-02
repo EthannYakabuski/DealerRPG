@@ -31,6 +31,13 @@ var traffic_routes: Array[PackedVector3Array] = []
 var campus_police_routes: Array[PackedVector3Array] = []
 var city_police_routes: Array[PackedVector3Array] = []
 var parked_car_spawns: Array[Dictionary] = []
+var parking_lots: Array[Dictionary] = []
+var parking_slots: Array[Dictionary] = []
+var outskirts_routes: Array[PackedVector3Array] = []
+var crosswalks: Array[Dictionary] = []
+var public_props: Array[Dictionary] = []
+var _path_corridors: Array[Dictionary] = []
+var _tree_requests: Array[Dictionary] = []
 var interior_nodes: Dictionary = {}
 var current_interior := ""
 var exterior: Node3D
@@ -67,6 +74,9 @@ func _ready() -> void:
 	_create_routes()
 	_create_interiors()
 	_bind_building_entrances()
+	_connect_parking_lots()
+	_clear_public_corridors()
+	_place_trees()
 	_create_markers()
 	_index_ground_primitives()
 	for cell: Vector2i in _surface_cells:
@@ -227,6 +237,7 @@ func _road(points: Array, width: float) -> void:
 
 func _path(points: Array, width: float) -> void:
 	var path := _points(points,0.0)
+	_path_corridors.append({"points":path,"width":width})
 	_ribbon(path,width+0.25,0.045,Color("a49d87"))
 	_ribbon(path,width,0.065,WALK)
 	for i in path.size()-1:
@@ -287,13 +298,16 @@ func _index_ground_primitives() -> void:
 					var angle := TAU*float(index)/16.0
 					var point := transform*Vector3(sin(angle)*0.5,0.5,cos(angle)*0.5)
 					polygon.append(Vector2(point.x,point.z))
-			if not polygon.is_empty(): _register_walkable_surface(polygon,top)
+			if not polygon.is_empty():
+				var color: Color = entry.mesh.material.albedo_color
+				var paved := color not in [Color("64785a"),Color("657e5a"),Color("716a50")]
+				_register_walkable_surface(polygon,top,paved)
 
-func _register_walkable_surface(polygon: PackedVector2Array, height: float) -> void:
+func _register_walkable_surface(polygon: PackedVector2Array, height: float, paved: bool = true) -> void:
 	var bounds := Rect2(polygon[0],Vector2.ZERO)
 	for point: Vector2 in polygon: bounds = bounds.expand(point)
 	var index := _walkable_surfaces.size()
-	_walkable_surfaces.append({"polygon":polygon,"height":height,"bounds":bounds})
+	_walkable_surfaces.append({"polygon":polygon,"height":height,"bounds":bounds,"paved":paved})
 	var first := Vector2i(floori(bounds.position.x/SURFACE_CELL),floori(bounds.position.y/SURFACE_CELL))
 	var last := Vector2i(floori(bounds.end.x/SURFACE_CELL),floori(bounds.end.y/SURFACE_CELL))
 	for x in range(first.x,last.x+1):
@@ -311,6 +325,15 @@ func walkable_surface_height(at: Vector3) -> float:
 		var surface: Dictionary = _walkable_surfaces[index]
 		if surface.bounds.has_point(point) and Geometry2D.is_point_in_polygon(point,surface.polygon): return float(surface.height)
 	return height
+
+func is_paved_surface(at: Vector3) -> bool:
+	if at.x>400.0: return true
+	var cell := Vector2i(floori(at.x/SURFACE_CELL),floori(at.z/SURFACE_CELL))
+	var point := Vector2(at.x,at.z)
+	for index: int in _surface_cells.get(cell,[]):
+		var surface: Dictionary = _walkable_surfaces[index]
+		if surface.bounds.has_point(point) and Geometry2D.is_point_in_polygon(point,surface.polygon): return bool(surface.paved)
+	return false
 
 func walkable_support_height(at: Vector3, radius: float) -> float:
 	if at.x>400.0: return -0.005
@@ -345,7 +368,7 @@ func _create_commercial() -> void:
 	_asset("Industrial_City/shipping-container-a",Vector3(-98.5,0,75),Vector3(3.0,3.0,6.3))
 	_asset("Roads/dumpster",Vector3(-80,0,77),Vector3(2.4,1.8,1.4))
 	_asset("Blasters/crate-medium",Vector3(-97,0,80),Vector3(1.3,1.1,1.0))
-	_path([Vector2(-96,70),Vector2(-84,53)],2.4)
+	_path([Vector2(-96,70),Vector2(-107,65),Vector2(-107,47),Vector2(-104,45),Vector2(-84,45)],2.4)
 	# Outdoor café terrace and familiar social meeting corner.
 	_batch.box(Vector3(-56,0.035,-18),Vector3(17,0.07,9),Color("a49c88"))
 	for x in [-62,-56,-50]:
@@ -472,15 +495,15 @@ func _create_streetscape() -> void:
 			var spacing := 25.0
 			var count := int(delta.length()/spacing)
 			for j in count:
-				var pos := path[i]+delta.normalized()*(j*spacing+11)+side*(road_widths[r]*0.5+1.6)
+				var pos := path[i]+delta.normalized()*(j*spacing+11)+side*(road_widths[r]*0.5+3.0)
 				if pos.x < 151 and pos.z > -122:
-					_asset("Roads/light-curved",pos,Vector3(1.7,5.1,0.45),atan2(delta.x,delta.z)-PI/2)
+					var lamp := _asset("Roads/light-curved",pos,Vector3(1.7,5.1,0.45),atan2(delta.x,delta.z)-PI/2)
 					var glow := MeshInstance3D.new()
 					glow.mesh = bulb_mesh
 					glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 					glow.material_override = night_material
-					glow.position = pos+Vector3.UP*4.8
-					exterior.add_child(glow)
+					glow.position = Vector3.UP*4.8
+					lamp.add_child(glow)
 				if r < 6 and j%2 == 0:
 					_tree(pos+side*3.3,5.0+(r%3),r%3)
 	for p in [Vector3(-130,0,-1),Vector3(-51,0,15),Vector3(34,0,14),Vector3(18,0,-83),Vector3(99,0,16)]:
@@ -501,11 +524,22 @@ func _create_routes() -> void:
 	traffic_routes.append(_lane_route([Vector2(-141,-49),Vector2(-135,-8),Vector2(-109,12),Vector2(-83,23),Vector2(-59,18),Vector2(-43,1),Vector2(-33,-22),Vector2(-10,-39),Vector2(18,-43),Vector2(16,-49),Vector2(12,-78),Vector2(10,-113),Vector2(-45,-95),Vector2(-97,-72)],1.7))
 	traffic_routes.append(_lane_route([Vector2(39,-94),Vector2(70,-104),Vector2(102,-98),Vector2(120,-79),Vector2(126,-51),Vector2(114,-28),Vector2(92,-21),Vector2(70,-27),Vector2(54,-49),Vector2(44,-74)],1.35))
 	traffic_routes.append(_lane_route([Vector2(18,-43),Vector2(28,-13),Vector2(42,23),Vector2(57,53),Vector2(74,87),Vector2(49,96),Vector2(-17,108),Vector2(-35,111),Vector2(-48,72),Vector2(-64,48),Vector2(-83,23),Vector2(-59,18),Vector2(-43,1),Vector2(-33,-22),Vector2(-10,-39)],1.4))
+	# Added loops serve the west edge and outer blocks without redistributing the
+	# original fourteen groups already walking the five established routes.
+	outskirts_routes.append(_points([Vector2(-112,26),Vector2(-108,56),Vector2(-88,63),Vector2(-68,57),Vector2(-74,34),Vector2(-94,30)]))
+	outskirts_routes.append(_points([Vector2(-128,-44),Vector2(-120,-59),Vector2(-103,-67),Vector2(-80,-77),Vector2(-54,-88),Vector2(-43,-82),Vector2(-54,-75),Vector2(-78,-64),Vector2(-110,-52)]))
+	outskirts_routes.append(_points([Vector2(-114,68),Vector2(-102,91),Vector2(-90,108),Vector2(-58,105),Vector2(-45,95),Vector2(-50,82),Vector2(-57,74),Vector2(-96,72)]))
+	outskirts_routes.append(_points([Vector2(116,63),Vector2(126,57),Vector2(133,42),Vector2(134,5),Vector2(126,-13),Vector2(124,9),Vector2(124,29),Vector2(121,53)]))
+	outskirts_routes.append(_points([Vector2(33,-105),Vector2(62,-113),Vector2(91,-109),Vector2(115,-99),Vector2(126,-81),Vector2(129,-62),Vector2(128,-38),Vector2(133,-61),Vector2(131,-91),Vector2(118,-104),Vector2(92,-112),Vector2(63,-117)]))
 	campus_police_routes.append(pedestrian_routes[0])
 	campus_police_routes.append(pedestrian_routes[3])
 	campus_police_routes.append(pedestrian_routes[4])
 	city_police_routes.append(pedestrian_routes[1])
 	city_police_routes.append(pedestrian_routes[2])
+	campus_police_routes.append(outskirts_routes[0])
+	campus_police_routes.append(outskirts_routes[3])
+	city_police_routes.append(outskirts_routes[1])
+	city_police_routes.append(outskirts_routes[4])
 
 func _lane_route(points: Array, lane_offset: float) -> PackedVector3Array:
 	var center := _points(points)
@@ -563,19 +597,33 @@ func _asset(key: String, at: Vector3, dimensions: Vector3, angle: float = 0.0, p
 		if absf(sin(angle)) > 0.5:
 			footprint = Vector3(footprint.z,footprint.y,footprint.x)
 		_collision(parent,at+Vector3.UP*footprint.y*0.5,footprint)
+	if parent==null and key in ["Furniture/bench","Furniture/trashcan","Roads/dumpster","Roads/light-curved","Roads/road-sign-stop","Roads/traffic-light","Suburban_City/planter"]:
+		public_props.append({"node":node,"radius":maxf(0.4,minf(1.4,maxf(dimensions.x,dimensions.z)*0.5)),"key":key})
 	return node
 
 func _tree(at: Vector3, height: float, variant: int = 0) -> void:
+	_tree_requests.append({"position":at,"height":height,"variant":variant})
+
+func _place_trees() -> void:
+	for entry: Dictionary in _tree_requests:
+		var at := _clear_prop_position(entry.position,0.7)
+		if at.is_finite(): _plant_tree(at,float(entry.height),int(entry.variant))
+	_tree_requests.clear()
+
+func _plant_tree(at: Vector3, height: float, variant: int) -> void:
 	var keys := ["Nature/tree_oak","Nature/tree_default_fall","Nature/tree_pineRoundA"]
 	var tree: Node3D = Art.make(keys[posmod(variant,keys.size())],Vector3.ZERO,height)
 	tree.position = at
 	tree.rotation.y = _rng.randf()*TAU
 	exterior.add_child(tree)
+	public_props.append({"node":tree,"radius":0.7,"key":"tree"})
 	_register_occluder(tree,AABB(at-Vector3(height*0.42,0,height*0.42),Vector3(height*0.84,height,height*0.84)))
 	# A small soil ring makes the lawn/tree transition deliberate.
 	_batch.cylinder(at+Vector3.UP*0.035,height*0.11,0.07,Color("716a50"))
 
 func _parking(center: Vector3, size: Vector2, angle: float, parked_count: int) -> void:
+	var lot_id := parking_lots.size()
+	parking_lots.append({"id":lot_id,"center":center,"size":size,"angle":angle})
 	_batch.box(center+Vector3.UP*0.025,Vector3(size.x+1.4,0.05,size.y+1.4),CURB,angle)
 	_batch.box(center+Vector3.UP*0.04,Vector3(size.x,0.03,size.y),Color("454c4c"),angle)
 	var rotate := Basis(Vector3.UP,angle)
@@ -584,6 +632,9 @@ func _parking(center: Vector3, size: Vector2, angle: float, parked_count: int) -
 		for i in stalls+1:
 			var local := Vector3(-size.x*0.5+2+i*3.3,0.075,row*(size.y*0.5-3.4))
 			_batch.box(center+rotate*local,Vector3(0.10,0.02,5.4),PAINT,angle)
+		for slot in stalls:
+			var stall_at := center+rotate*Vector3(-size.x*0.5+3.5+slot*3.3,0.13,row*(size.y*0.5-3.4))
+			parking_slots.append({"id":parking_slots.size(),"lot":lot_id,"position":stall_at,"rotation":angle+(PI if row==1 else 0.0)})
 		for i in mini(parked_count,stalls):
 			var local := Vector3(-size.x*0.5+3.5+i*6.6,0.13,row*(size.y*0.5-3.4))
 			if local.x < size.x*0.5-2:
@@ -591,12 +642,98 @@ func _parking(center: Vector3, size: Vector2, angle: float, parked_count: int) -
 				var model: String = ["sedan","hatchback-sports","suv","van"][posmod(i+row+1,4)]
 				if i == 0 and row == -1 and center.x < -70 and absf(center.z) > 30:
 					model = "police"
-				parked_car_spawns.append({"position":pos,"rotation":angle+(PI if row == 1 else 0.0),"model":model})
+				parked_car_spawns.append({"position":pos,"rotation":angle+(PI if row == 1 else 0.0),"model":model,"lot":lot_id})
 
-func _crosswalk(at: Vector3, angle: float, width: float) -> void:
-	var rotate := Basis(Vector3.UP,angle)
-	for i in 7:
-		_batch.box(at+rotate*Vector3(0,0.14,(i-3)*0.85),Vector3(width,0.025,0.4),PAINT,angle)
+func _crosswalk(near: Vector3, _angle: float, _width: float) -> void:
+	# Derive the paint from the actual road segment. Stripes run along traffic;
+	# their row spans the road at ninety degrees and meets both sidewalk edges.
+	var closest := INF
+	var center := near
+	var tangent := Vector3.FORWARD
+	var width := _width
+	var road_id := -1
+	for index in map_roads.size():
+		var road: PackedVector3Array = map_roads[index]
+		for segment in road.size()-1:
+			var direction := (road[segment+1]-road[segment]).normalized()
+			var length := road[segment].distance_to(road[segment+1])
+			var inset := minf(5.0,length*0.25)
+			var at := Geometry3D.get_closest_point_to_segment(near,road[segment]+direction*inset,road[segment+1]-direction*inset)
+			var gap := at.distance_squared_to(near)
+			if gap<closest:
+				closest = gap
+				center = at
+				tangent = (road[segment+1]-road[segment]).normalized()
+				width = road_widths[index]
+				road_id = index
+	var side := Vector3(tangent.z,0,-tangent.x)
+	var angle := atan2(tangent.x,tangent.z)
+	var count := maxi(5,int(width/0.8))
+	for i in count:
+		var offset := (float(i)/float(count-1)-0.5)*(width-0.8)
+		_batch.box(center+side*offset+Vector3.UP*0.14,Vector3(0.42,0.025,3.8),PAINT,angle)
+	crosswalks.append({"center":center,"tangent":tangent,"width":width,"road":road_id})
+
+func _corridor_clear(at: Vector3, radius: float) -> bool:
+	if absf(at.x)>152.0 or absf(at.z)>123.0: return false
+	var point := Vector2(at.x,at.z)
+	for obstacle: Rect2 in obstacle_rects:
+		if obstacle.grow(radius).has_point(point): return false
+	for index in map_roads.size():
+		var road: PackedVector3Array = map_roads[index]
+		for segment in road.size()-1:
+			if at.distance_to(Geometry3D.get_closest_point_to_segment(at,road[segment],road[segment+1]))<road_widths[index]*0.5+2.4+radius: return false
+	for corridor: Dictionary in _path_corridors:
+		var points: PackedVector3Array = corridor.points
+		for segment in points.size()-1:
+			if at.distance_to(Geometry3D.get_closest_point_to_segment(at,points[segment],points[segment+1]))<float(corridor.width)*0.5+radius: return false
+	return true
+
+func _clear_prop_position(at: Vector3, radius: float) -> Vector3:
+	if _corridor_clear(at,radius): return at
+	for distance: float in [1.5,3.0,4.5,6.0,8.0,10.0]:
+		for index in 16:
+			var angle := TAU*float(index)/16.0
+			var candidate := at+Vector3(cos(angle),0,sin(angle))*distance
+			if _corridor_clear(candidate,radius): return candidate
+	return Vector3.INF
+
+func _clear_public_corridors() -> void:
+	for entry: Dictionary in public_props:
+		var at := _clear_prop_position(entry.node.position,float(entry.radius))
+		if at.is_finite(): entry.node.position = at
+		else: entry.node.visible = false
+
+func _vehicle_corridor_clear(a: Vector3,b: Vector3,margin: float=1.65) -> bool:
+	var length := a.distance_to(b)
+	for step in range(ceili(length)+1):
+		var at := a.lerp(b,float(step)/maxf(1.0,ceilf(length)))
+		for rect: Rect2 in obstacle_rects:
+			if rect.grow(margin).has_point(Vector2(at.x,at.z)): return false
+	return true
+
+func _connect_parking_lots() -> void:
+	for lot: Dictionary in parking_lots:
+		var center: Vector3 = lot.center
+		var rotate := Basis(Vector3.UP,float(lot.angle))
+		var best := INF
+		var gate := Vector3.INF
+		var road_point := Vector3.INF
+		for side: Vector3 in [Vector3.LEFT,Vector3.RIGHT]:
+			var extent: float = lot.size.x*0.5 if side.x!=0 else lot.size.y*0.5
+			var candidate := center+rotate*side*(extent+0.4)
+			for road: PackedVector3Array in map_roads:
+				for segment in road.size()-1:
+					var point := Geometry3D.get_closest_point_to_segment(candidate,road[segment],road[segment+1])
+					var score := candidate.distance_to(point)+center.distance_to(candidate)
+					if score>=best or not _vehicle_corridor_clear(candidate,point): continue
+					best = score
+					gate = candidate
+					road_point = point
+		if gate.is_finite():
+			lot.gate = gate
+			lot.road_point = road_point
+			_path([Vector2(gate.x,gate.z),Vector2(road_point.x,road_point.z)],5.8)
 
 func _sign(text: String, at: Vector3, accent: Color) -> void:
 	_batch.box(at+Vector3.UP*1.7,Vector3(0.12,3.4,0.12),INK)

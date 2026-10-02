@@ -8,6 +8,7 @@ const SKATEBOARD_LENGTH := 1.4
 const SKATEBOARD_WIDTH := 0.48
 const SKATEBOARD_HEIGHT := 0.19
 const SKATEBOARD_DECK_HEIGHT := 0.17
+const SKATEBOARD_GRASS_SPEED := 2.2
 
 var visual: Node3D
 var board: Node3D
@@ -31,6 +32,7 @@ var last_attack_kind := ""
 var _grounded_position := Vector3.INF
 var _grounded_heading := INF
 var _grounded_board := false
+var board_on_grass := false
 var impact_cooldown := 0.0
 var impact_velocity := Vector3.ZERO
 
@@ -119,12 +121,16 @@ func _physics_process(delta: float) -> void:
 	else:
 		Game.energy = minf(100.0,Game.energy + delta * 1.5)
 	if skateboarding:
-		speed = 11.8
+		board_on_grass = city_world!=null and not city_world.is_paved_surface(global_position)
+		speed = SKATEBOARD_GRASS_SPEED if board_on_grass else 11.8
+	else:
+		board_on_grass = false
 	if vehicle:
 		speed = 20.0
 	if Game.hunger < 15:
 		speed *= 0.75
 	var acceleration := 24.0 if not skateboarding else 14.0
+	if skateboarding and board_on_grass: acceleration=32.0
 	if vehicle:
 		acceleration = 10.0 if direction.length_squared() > 0.01 else 16.0
 	velocity.x = move_toward(velocity.x, direction.x * speed, acceleration * delta)
@@ -228,6 +234,7 @@ func reset_travel() -> void:
 	vehicle = null
 	skateboarding = false
 	exhausted = false
+	board_on_grass = false
 	attack_cooldown = 0.0
 	impact_cooldown = 0.0
 	impact_velocity = Vector3.ZERO
@@ -271,4 +278,4 @@ func receive_vehicle_impact(car_velocity: Vector3, source: Node3D) -> bool:
 func travel_mode() -> String:
 	if vehicle:
 		return "DRIVING"
-	return "SKATEBOARD" if skateboarding else "ON FOOT"
+	return ("SKATEBOARD / GRASS" if board_on_grass else "SKATEBOARD") if skateboarding else "ON FOOT"

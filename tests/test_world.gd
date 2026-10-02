@@ -47,8 +47,9 @@ func _run() -> void:
 					if p2.distance_to(closest) < world.road_widths[r]*0.5+0.2:
 						road_conflicts["road %d / building %d" % [r,b]] = str(world.map_buildings[b])
 	var pedestrian_conflicts: Dictionary = {}
-	for r in world.pedestrian_routes.size():
-		var points: PackedVector3Array = world.pedestrian_routes[r]
+	var all_walking_routes: Array = world.pedestrian_routes+world.outskirts_routes
+	for r in all_walking_routes.size():
+		var points: PackedVector3Array = all_walking_routes[r]
 		for i in points.size():
 			var next: Vector3 = points[(i+1)%points.size()]
 			var distance := points[i].distance_to(next)
@@ -57,6 +58,19 @@ func _run() -> void:
 				for b in world.obstacle_rects.size():
 					if world.obstacle_rects[b].grow(0.35).has_point(Vector2(pos.x,pos.z)):
 						pedestrian_conflicts["route %d / segment %d / building %d" % [r,i,b]] = str(pos)
+	for crossing: Dictionary in world.crosswalks:
+		var centered := false
+		var road: PackedVector3Array = world.map_roads[int(crossing.road)]
+		for segment in road.size()-1:
+			var closest := Geometry3D.get_closest_point_to_segment(crossing.center,road[segment],road[segment+1])
+			if closest.distance_to(crossing.center)<0.01 and absf(crossing.tangent.dot((road[segment+1]-road[segment]).normalized()))>0.999: centered = true
+		if not centered: failures.append("Crosswalk is not centered/aligned with its actual road")
+	for prop: Dictionary in world.public_props:
+		if prop.node.visible and not world._corridor_clear(prop.node.position,float(prop.radius)-0.01): failures.append("Prop blocks a sidewalk/path: "+str(prop.key))
+	if world.is_paved_surface(Vector3(32,0,58)) or world.is_paved_surface(Vector3(43,0,63)): failures.append("Raised turf/bare grass incorrectly treated as skate paving")
+	if not world.is_paved_surface(Vector3(22,0,61)) or not world.is_paved_surface(Vector3(71,0,18)): failures.append("Actual paving/asphalt is missing its skating classification")
+	for lot: Dictionary in world.parking_lots:
+		if not lot.has("gate") or not world._vehicle_corridor_clear(lot.gate,lot.road_point): failures.append("Parking lot lacks a driveable entrance")
 	var traffic_conflicts: Dictionary = {}
 	for r in world.traffic_routes.size():
 		var points: PackedVector3Array = world.traffic_routes[r]

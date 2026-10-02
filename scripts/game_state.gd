@@ -9,6 +9,11 @@ signal crime_committed(severity: float)
 signal feedback_event(kind: String, value: float)
 signal civilian_reaction(npc_id: String, reaction: String)
 signal police_tip(location_id: String, severity: float)
+signal street_reaction(npc_id: String, kind: String)
+signal meeting_reaction(meeting_id: int, kind: String)
+signal party_reaction(contact_id: String, kind: String)
+signal meeting_missed(meeting_id: int, contact_id: String)
+signal police_pressure_changed
 
 const Data = preload("res://scripts/game_data.gd")
 const TIME_SCALE: float = 3.0
@@ -22,6 +27,8 @@ const VEHICLE_PRICE: float = 900.0
 const FIRST_FOLLOWUP_MINUTES: float = 90.0
 const REORDER_MINUTES: float = 360.0
 const REQUEST_RETRY_MINUTES: float = 240.0
+const MAX_EXTRA_OFFICERS_PER_AREA: int = 4
+const MAX_VISIBLE_EXTRA_OFFICERS: int = 8
 
 var cash: float = 22.0
 var tuition_remaining: float = Data.STARTING_TUITION
@@ -39,6 +46,11 @@ var meetings: Array[Dictionary] = []
 var introductions: Array[Dictionary] = []
 var callbacks: Array[Dictionary] = []
 var street_npcs: Dictionary = {}
+var active_party: Dictionary = {}
+var police_pressure: Dictionary = {}
+var pursuit_incidents: int = 0
+var last_meeting_location: String = ""
+var consecutive_location_meetings: int = 0
 var status: String = "playing"
 var ending_reason: String = ""
 var missed_classes: int = 0
@@ -95,6 +107,11 @@ func restart_game(delete_save: bool = true) -> void:
 	introductions.clear()
 	callbacks.clear()
 	street_npcs.clear()
+	active_party.clear()
+	police_pressure.clear()
+	pursuit_incidents = 0
+	last_meeting_location = ""
+	consecutive_location_meetings = 0
 	status = "playing"
 	ending_reason = ""
 	missed_classes = 0
@@ -231,6 +248,8 @@ func schedule_meeting(message_id: int, location_id: String, delay_minutes: float
 			return _fail("That request has expired or was already answered.")
 		if price > float(message.get("max_price", 40.0)): return _fail("They only agreed to the discounted price of $%d or less." % int(message["max_price"]))
 		var due: float = minute + delay_minutes
+		if bool(party_summary()["active"]) and not _party_guest(str(message["contact_id"])).is_empty() and due <= float(active_party["end_minute"]) + 15.0:
+			return _fail("They're coming to your party. Arrange the meeting at least 15 minutes after it ends.")
 		if _overlaps_class(due): return _fail("That time conflicts with class. Choose another time.")
 		for meeting: Dictionary in meetings:
 			if meeting["status"] == "scheduled" and absf(float(meeting["due_minute"]) - due) < 35.0:
@@ -283,8 +302,10 @@ func complete_meeting(meeting_id: int) -> bool:
 		total_sales += 1
 		reputation += 1 if relationship_change >= 0.0 else 0
 		meeting["status"] = "completed"
+		_record_meeting_location(str(meeting["location_id"]))
 		_notify("Sold %d bags to %s for $%d. Relationship %s." % [quantity, contact["name"], int(earnings), "+%.0f" % relationship_change if relationship_change >= 0.0 else "%.0f" % relationship_change])
 		feedback_event.emit("sale", earnings)
+		meeting_reaction.emit(meeting_id, "happy" if relationship_change >= 0.0 else "sad")
 		report_crime(10.0 + quantity * 2.0)
 		if bool(contact.get("_informant", false)) and not bool(contact.get("_sting_triggered", false)):
 			contact["_sting_triggered"] = true
@@ -300,6 +321,7 @@ func cancel_meeting(meeting_id: int) -> bool:
 	for meeting: Dictionary in meetings:
 		if int(meeting["id"]) == meeting_id and meeting["status"] == "scheduled":
 			meeting["status"] = "cancelled"
+			meeting_reaction.emit(meeting_id, "sad")
 			var contact: Dictionary = _find_contact(str(meeting["contact_id"]))
 			if not contact.is_empty():
 				contact["relationship"] = maxf(0.0, float(contact["relationship"]) - 3.0)
@@ -343,6 +365,8 @@ func _complete_supplier(meeting: Dictionary) -> bool:
 	inventory["flower"] = old_stock + quantity
 	cash -= cost
 	meeting["status"] = "completed"
+	_record_meeting_location(str(meeting["location_id"]))
+	meeting_reaction.emit(int(meeting["id"]), "happy")
 	var bust: bool = _rng.randf() < float(meeting.get("risk", 0.05))
 	_notify("Collected %d bundles from %s. Split them in your backpack." % [quantity, meeting["contact_name"]])
 	feedback_event.emit("purchase", -cost)
@@ -490,38 +514,129 @@ func host_party() -> bool:
 	if not _can_act() or tutorial_step < 3: return false
 	if player_location_id != "home": return _fail("Go home to host a party.")
 	if reputation < 5 or contacts.size() < 2: return _fail("Build reputation 5 and meet a second contact before hosting.")
-	if last_party_day == day_number(): return _fail("One party per day. Give your neighbours a break.")
+	if bool(party_summary()["active"]): return _fail("Your party is already running. Invite a friend or chat with a guest.")
 	if heat > 45.0: return _fail("There's too much police interest to invite people over.")
 	var time_of_day: float = fmod(minute, MINUTES_PER_DAY)
-	if time_of_day < 17.0 * 60.0 or time_of_day >= 23.0 * 60.0: return _fail("Parties start between 17:00 and 23:00.")
-	var quantity: int = mini(int(inventory["dime_bag"]), mini(24, 6 + contacts.size() * 2))
-	if quantity < 6: return _fail("Have at least six bags ready before inviting everyone.")
+	if time_of_day >= 120.0 and time_of_day < 1020.0: return _fail("Parties run between 17:00 and 02:00.")
+	var night_day: int = day_number() - (1 if time_of_day < 120.0 else 0)
+	if parties_hosted > 0 and last_party_day == night_day: return _fail("One party per night. Give your neighbours a break.")
 	if cash < 25.0: return _fail("You need $25 for food and party supplies.")
-	last_party_day = day_number()
+	var closing: float = float(day_number() - 1) * MINUTES_PER_DAY + (120.0 if time_of_day < 120.0 else 1560.0)
+	if closing - minute < 20.0: return _fail("It's nearly 02:00. Save the party for tomorrow evening.")
+	last_party_day = night_day
 	parties_hosted += 1
-	inventory["dime_bag"] = int(inventory["dime_bag"]) - quantity
-	var earnings: float = quantity * (22.0 + dime_quality * 6.0)
-	cash += earnings - 25.0
-	total_earned += earnings
-	total_sales += quantity / 2
-	reputation += 3
-	for contact: Dictionary in contacts:
-		contact["relationship"] = minf(100.0, float(contact["relationship"]) + 5.0)
-		contact["last_sale_minute"] = minute + 90.0
-		contact["last_order_quantity"] = maxi(1, quantity / contacts.size())
-		contact["next_request_minute"] = minute + 90.0 + _reorder_delay(int(contact["last_order_quantity"]))
-	# Guests have already bought at the party. Their unaccepted requests are
-	# fulfilled by the event; deliberately scheduled appointments stay intact.
-	for message: Dictionary in inbox:
-		if message["status"] == "new": message["status"] = "expired"
-	advance_time(90.0)
-	if status != "playing": return false
-	_notify("Your party brought in $%d after supplies. People are talking — including the neighbours." % int(earnings - 25.0))
-	feedback_event.emit("party", earnings - 25.0)
-	report_crime(30.0 + quantity)
-	_maybe_referral(contacts[0])
+	cash -= 25.0
+	active_party = {"id": _new_id(), "start_minute": minute, "end_minute": minf(minute + 180.0, closing), "night_day": night_day, "status": "active", "guests": []}
+	_notify("Party supplies are ready. Invite up to eight contacts and greet them at home. The party ends at %s." % format_minute(float(active_party["end_minute"])))
+	feedback_event.emit("purchase", -25.0)
 	_mark_changed()
 	return true
+
+func party_summary() -> Dictionary:
+	var live: bool = not active_party.is_empty() and active_party.get("status", "") == "active" and minute < float(active_party.get("end_minute", 0.0)) and status == "playing"
+	var guests: Array = active_party.get("guests", []).duplicate(true)
+	return {"active": live, "id": int(active_party.get("id", 0)), "start_minute": float(active_party.get("start_minute", 0.0)), "end_minute": float(active_party.get("end_minute", 0.0)), "ends_minute": float(active_party.get("end_minute", 0.0)), "guest_count": guests.size(), "guests": guests, "can_invite": live and guests.size() < 8 and minute + 15.0 < float(active_party.get("end_minute", 0.0))}
+
+func invite_party_contact(contact_id: String) -> bool:
+	if not _can_act() or not bool(party_summary()["can_invite"]): return _fail("Start a party with space and time for another guest first.")
+	var contact: Dictionary = _find_contact(contact_id)
+	if contact.is_empty() or bool(contact.get("blocked", false)): return _fail("That contact cannot be invited.")
+	if not _party_guest(contact_id).is_empty(): return _fail("They already have an invitation to this party.")
+	for meeting: Dictionary in active_meetings():
+		if meeting["contact_id"] == contact_id and float(meeting["due_minute"]) <= float(active_party["end_minute"]) + 15.0: return _fail("You've already arranged a meeting with them. Keep that appointment first.")
+	var arrival: float = minf(minute + 15.0 + active_party["guests"].size() * 4.0 + _rng.randf_range(0.0, 8.0), float(active_party["end_minute"]) - 5.0)
+	active_party["guests"].append({"contact_id": contact_id, "name": str(contact["name"]), "arrival_minute": arrival, "status": "invited", "arrived": false, "chatted": false, "purchased": false})
+	_notify("%s: I'll come over. See you around %s." % [contact["name"], format_minute(arrival)])
+	feedback_event.emit("text", 0.0)
+	_mark_changed()
+	return true
+
+func _party_guest(contact_id: String) -> Dictionary:
+	for guest: Dictionary in active_party.get("guests", []):
+		if guest["contact_id"] == contact_id: return guest
+	return {}
+
+func mark_party_guest_arrived(contact_id: String) -> bool:
+	if not _can_act() or not bool(party_summary()["active"]): return false
+	var guest: Dictionary = _party_guest(contact_id)
+	if guest.is_empty() or bool(guest["arrived"]) or minute < float(guest["arrival_minute"]): return false
+	var contact: Dictionary = _find_contact(contact_id)
+	if contact.is_empty(): return false
+	guest["arrived"] = true
+	guest["status"] = "inside"
+	contact["relationship"] = minf(100.0, float(contact["relationship"]) + 2.0)
+	party_reaction.emit(contact_id, "wave")
+	_mark_changed()
+	return true
+
+func party_guest_arrived(contact_id: String) -> bool:
+	return mark_party_guest_arrived(contact_id)
+
+func party_guest_view(contact_id: String) -> Dictionary:
+	var guest: Dictionary = _party_guest(contact_id)
+	if guest.is_empty(): return {}
+	var available: bool = bool(party_summary()["active"]) and bool(guest["arrived"]) and player_location_id == "home"
+	var text: String = "Good to see you. Thanks for having me over!"
+	if bool(guest["chatted"]): text = "This was a good idea. Nice to catch up outside class."
+	if bool(guest["purchased"]): text = "I'm sorted for tonight, thanks. Let's enjoy the party."
+	return {"contact_id": contact_id, "name": str(guest["name"]), "text": text, "can_offer": available and not bool(guest["purchased"]), "can_chat": available and not bool(guest["chatted"]), "price": 24.0, "sold": bool(guest["purchased"])}
+
+func chat_party_guest(contact_id: String) -> bool:
+	var view: Dictionary = party_guest_view(contact_id)
+	if not _can_act() or not bool(view.get("can_chat", false)): return false
+	var guest: Dictionary = _party_guest(contact_id)
+	var contact: Dictionary = _find_contact(contact_id)
+	if contact.is_empty(): return false
+	guest["chatted"] = true
+	contact["relationship"] = minf(100.0, float(contact["relationship"]) + 3.0)
+	party_reaction.emit(contact_id, "happy")
+	_notify("You caught up with %s. Relationship +3." % guest["name"])
+	_maybe_referral(contact)
+	_mark_changed()
+	return true
+
+func party_chat(contact_id: String) -> bool:
+	return chat_party_guest(contact_id)
+
+func sell_party_guest(contact_id: String) -> bool:
+	var view: Dictionary = party_guest_view(contact_id)
+	if not _can_act() or not bool(view.get("can_offer", false)): return false
+	if int(inventory["dime_bag"]) < 1: return _fail("Pack a bag before offering a sale to your guest.")
+	var guest: Dictionary = _party_guest(contact_id)
+	var contact: Dictionary = _find_contact(contact_id)
+	if contact.is_empty(): return false
+	guest["purchased"] = true
+	inventory["dime_bag"] = int(inventory["dime_bag"]) - 1
+	cash += 24.0
+	total_earned += 24.0
+	total_sales += 1
+	reputation += 1
+	contact["sales"] = int(contact["sales"]) + 1
+	contact["last_sale_minute"] = minute
+	contact["last_order_quantity"] = 1
+	contact["next_request_minute"] = minute + _reorder_delay(1)
+	for message: Dictionary in inbox:
+		if message["contact_id"] == contact_id and message["status"] == "new": message["status"] = "expired"
+	_notify("Sold one bag to %s for $24." % guest["name"])
+	feedback_event.emit("party", 24.0)
+	party_reaction.emit(contact_id, "happy")
+	report_crime(12.0)
+	if bool(contact.get("_informant", false)) and not bool(contact.get("_sting_triggered", false)):
+		contact["_sting_triggered"] = true
+		_notify("Your guest slips outside and makes a call. A patrol is checking the apartment — be careful.")
+		police_tip.emit("home", 85.0)
+	_maybe_referral(contact)
+	_mark_changed()
+	return true
+
+func party_sell(contact_id: String) -> bool:
+	return sell_party_guest(contact_id)
+
+func _resolve_party() -> void:
+	if active_party.is_empty() or active_party["status"] != "active" or minute < float(active_party["end_minute"]): return
+	active_party["status"] = "ended"
+	for guest: Dictionary in active_party["guests"]: guest["status"] = "left"
+	_notify("The party has wrapped up. Your guests are heading home.")
 
 func advance_time(minutes: float) -> void:
 	if status != "playing" or not is_finite(minutes) or minutes <= 0.0: return
@@ -542,6 +657,8 @@ func advance_time(minutes: float) -> void:
 		_resolve_classes()
 		if status != "playing": break
 		_resolve_meetings()
+		_resolve_party()
+		_expire_police_pressure()
 		if tutorial_step >= 3:
 			_process_callbacks()
 			_generate_messages()
@@ -554,6 +671,65 @@ func set_heat(value: float) -> void:
 	if not is_finite(value) or status != "playing": return
 	heat = clampf(value, 0.0, 100.0)
 	_mark_changed()
+
+func _pressure_area(location_id: String) -> Dictionary:
+	if not police_pressure.has(location_id):
+		police_pressure[location_id] = {"watch_level": 0, "incident_count": 0, "last_bust_minute": -1.0, "expires_minute": 0.0}
+	return police_pressure[location_id]
+
+func _record_meeting_location(location_id: String) -> void:
+	if not _valid_location(location_id): return
+	_expire_police_pressure()
+	consecutive_location_meetings = consecutive_location_meetings + 1 if last_meeting_location == location_id else 1
+	last_meeting_location = location_id
+	var level: int = 2 if consecutive_location_meetings >= 3 else (1 if consecutive_location_meetings == 2 else 0)
+	if level == 0: return
+	var area: Dictionary = _pressure_area(location_id)
+	if int(area["watch_level"]) >= level: return
+	area["watch_level"] = level
+	if float(area["expires_minute"]) <= minute: area["expires_minute"] = minute + MINUTES_PER_DAY
+	_notify("%s is %s after repeated meetings. Consider another spot." % [Data.location_name(location_id), "under heavy police watch" if level == 2 else "drawing police attention"])
+	police_pressure_changed.emit()
+
+func register_pursuit(location_id: String) -> void:
+	# World calls this only when a new pursuit starts, never every witness tick.
+	if not _can_act() or not _valid_location(location_id): return
+	_expire_police_pressure()
+	pursuit_incidents += 1
+	var area: Dictionary = _pressure_area(location_id)
+	area["incident_count"] = int(area["incident_count"]) + 1
+	area["last_bust_minute"] = minute
+	area["expires_minute"] = minute + MINUTES_PER_DAY
+	police_pressure_changed.emit()
+	_mark_changed()
+
+func escape_duration_seconds() -> float:
+	if pursuit_incidents <= 2: return 10.0
+	if pursuit_incidents <= 6: return 10.0 + float(pursuit_incidents - 2) * 5.0
+	return 30.0 + float(pursuit_incidents - 6) * 10.0
+
+func police_pressure_locations() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for location_id: String in police_pressure:
+		var area: Dictionary = police_pressure[location_id]
+		if float(area["expires_minute"]) <= minute: continue
+		var strength: int = mini(MAX_EXTRA_OFFICERS_PER_AREA, int(area["watch_level"]) + int(area["incident_count"]))
+		if strength <= 0: continue
+		result.append({"location_id": location_id, "expires_minute": float(area["expires_minute"]), "strength": strength, "watch_level": int(area["watch_level"]), "incident_count": int(area["incident_count"])})
+	result.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["strength"]) > int(b["strength"]))
+	return result
+
+func _expire_police_pressure(emit_signal: bool = true) -> bool:
+	var removed: bool = false
+	for location_id: String in police_pressure.keys():
+		if float(police_pressure[location_id]["expires_minute"]) > minute: continue
+		police_pressure.erase(location_id)
+		if last_meeting_location == location_id:
+			last_meeting_location = ""
+			consecutive_location_meetings = 0
+		removed = true
+	if removed and emit_signal: police_pressure_changed.emit()
+	return removed
 
 func report_crime(severity: float) -> void:
 	if not _can_act() or not is_finite(severity) or severity <= 0.0: return
@@ -601,6 +777,8 @@ func _resolve_meetings() -> void:
 		if meeting["status"] != "scheduled": continue
 		if minute <= float(meeting["due_minute"]) + _meeting_grace(meeting): continue
 		meeting["status"] = "missed"
+		meeting_reaction.emit(int(meeting["id"]), "angry")
+		meeting_missed.emit(int(meeting["id"]), str(meeting["contact_id"]))
 		var contact: Dictionary = _find_contact(str(meeting["contact_id"]))
 		if not contact.is_empty():
 			contact["relationship"] = maxf(0.0, float(contact["relationship"]) - 12.0)
@@ -644,6 +822,7 @@ func _generate_messages() -> void:
 
 func _contact_can_request(contact: Dictionary) -> bool:
 	if bool(contact.get("blocked", false)): return false
+	if bool(party_summary()["active"]) and not _party_guest(str(contact["id"])).is_empty(): return false
 	if minute < float(contact.get("next_request_minute", minute)): return false
 	for callback: Dictionary in callbacks:
 		if callback["status"] == "pending" and callback["contact_id"] == contact["id"]: return false
@@ -789,6 +968,7 @@ func _can_proactive_request(contact: Dictionary) -> bool:
 	return last_sale < 0.0 or minute >= last_sale + gap
 
 func _contact_has_business(contact_id: String) -> bool:
+	if bool(party_summary()["active"]) and not _party_guest(contact_id).is_empty(): return true
 	for message: Dictionary in inbox:
 		if message["contact_id"] == contact_id and message["status"] == "new": return true
 	for meeting: Dictionary in meetings:
@@ -802,11 +982,26 @@ func street_conversation(npc_id: String, npc_name: String = "Neighbour") -> Dict
 	if not street_npcs.has(npc_id):
 		if street_npcs.size() >= 128: return {}
 		var roll: float = _rng.randf()
-		street_npcs[npc_id] = {"name": npc_name.left(60), "response": "sale" if roll < 0.60 else ("refusal" if roll < 0.91 else "report"), "status": "idle", "next_offer_minute": 0.0, "last_sale_minute": -1.0, "sales": 0, "contact_id": "", "text": "Hey. What's up?"}
+		# A separate draw gives every hidden outcome the same pool of voices.
+		var dialogue_seed: int = _rng.randi_range(0, 1000000)
+		street_npcs[npc_id] = {"name": npc_name.left(60), "response": "sale" if roll < 0.60 else ("refusal" if roll < 0.91 else "report"), "status": "idle", "next_offer_minute": 0.0, "last_sale_minute": -1.0, "sales": 0, "contact_id": "", "text": Data.STREET_GREETINGS[dialogue_seed % Data.STREET_GREETINGS.size()], "dialogue_seed": dialogue_seed, "talk_count": 0}
 	var npc: Dictionary = street_npcs[npc_id]
 	var contact: Dictionary = _find_contact(str(npc["contact_id"]))
 	var ready: bool = minute >= float(npc["next_offer_minute"]) and (contact.is_empty() or (minute >= float(contact["next_request_minute"]) and not _contact_has_business(str(contact["id"]))))
 	return {"npc_id": npc_id, "name": str(npc["name"]), "text": str(npc["text"]), "can_offer": tutorial_step >= 3 and ready and npc["status"] not in ["reporting", "reported"], "can_add_contact": int(npc["sales"]) > 0 and str(npc["contact_id"]).is_empty(), "sold": int(npc["sales"]) > 0, "price": 22.0, "contact_id": str(npc["contact_id"])}
+
+func street_smalltalk(npc_id: String, _goal: String = "") -> String:
+	if not _can_act() or not street_npcs.has(npc_id): return ""
+	var npc: Dictionary = street_npcs[npc_id]
+	if npc["status"] in ["reporting", "reported"]: return str(npc["text"])
+	var seed_value: int = int(npc.get("dialogue_seed", posmod(npc_id.hash(), 1000000)))
+	var count: int = int(npc.get("talk_count", 0))
+	var reply: String = Data.STREET_SMALLTALK[(seed_value + count) % Data.STREET_SMALLTALK.size()]
+	npc["talk_count"] = count + 1
+	npc["text"] = reply
+	street_reaction.emit(npc_id, "question" if count % 3 == 1 else "wave")
+	_mark_changed()
+	return reply
 
 func offer_street_sale(npc_id: String) -> bool:
 	if not _can_act() or tutorial_step < 3 or not street_npcs.has(npc_id): return false
@@ -814,15 +1009,18 @@ func offer_street_sale(npc_id: String) -> bool:
 	if not bool(view.get("can_offer", false)): return _fail("They aren't looking for another offer right now.")
 	if int(inventory["dime_bag"]) < 1: return _fail("Pack a dime bag before offering a sale.")
 	var npc: Dictionary = street_npcs[npc_id]
+	var reply_index: int = int(npc.get("dialogue_seed", posmod(npc_id.hash(), 1000000)))
 	npc["next_offer_minute"] = minute + REQUEST_RETRY_MINUTES
 	if npc["response"] == "refusal":
-		npc["text"] = "No thanks. I'm not interested."
+		npc["text"] = Data.STREET_REFUSE_REPLIES[reply_index % Data.STREET_REFUSE_REPLIES.size()]
+		street_reaction.emit(npc_id, "sad")
 		_notify("%s: %s" % [npc["name"], npc["text"]])
 		_mark_changed()
 		return false
 	if npc["response"] == "report":
 		npc["status"] = "reporting"
-		npc["text"] = "Stay away from me. I'm telling an officer."
+		npc["text"] = Data.STREET_REPORT_REPLIES[reply_index % Data.STREET_REPORT_REPLIES.size()]
+		street_reaction.emit(npc_id, "angry")
 		_notify("%s backs away and starts looking for a police officer." % npc["name"])
 		civilian_reaction.emit(npc_id, "report")
 		_mark_changed()
@@ -836,7 +1034,7 @@ func offer_street_sale(npc_id: String) -> bool:
 	npc["status"] = "sold"
 	npc["last_sale_minute"] = minute
 	npc["next_offer_minute"] = minute + _reorder_delay(1)
-	npc["text"] = "Thanks. Save my number if you want to keep in touch."
+	npc["text"] = Data.STREET_BUY_REPLIES[reply_index % Data.STREET_BUY_REPLIES.size()]
 	var contact: Dictionary = _find_contact(str(npc["contact_id"]))
 	if not contact.is_empty():
 		contact["sales"] = int(contact["sales"]) + 1
@@ -847,6 +1045,7 @@ func offer_street_sale(npc_id: String) -> bool:
 		_maybe_referral(contact)
 	_notify("Sold one bag to %s for $22." % npc["name"])
 	feedback_event.emit("sale", 22.0)
+	street_reaction.emit(npc_id, "happy")
 	report_crime(12.0)
 	_mark_changed()
 	return true
@@ -1007,6 +1206,9 @@ func save_game() -> bool:
 		"vehicle_owned": vehicle_owned, "flower_quality": flower_quality, "dime_quality": dime_quality,
 		"total_sales": total_sales, "total_earned": total_earned, "classes_attended": classes_attended,
 		"parties_hosted": parties_hosted, "last_party_day": last_party_day,
+		"active_party": active_party, "police_pressure": police_pressure,
+		"pursuit_incidents": pursuit_incidents, "last_meeting_location": last_meeting_location,
+		"consecutive_location_meetings": consecutive_location_meetings,
 		"next_id": _next_id, "class_resolved_through": _class_resolved_through,
 		"next_message_minute": _next_message_minute, "player_location_id": player_location_id,
 		"world_state": _sanitize_world_state(world_state),
@@ -1054,6 +1256,11 @@ func load_game(show_message: bool = true) -> bool:
 	classes_attended = int(state["classes_attended"])
 	parties_hosted = int(state["parties_hosted"])
 	last_party_day = int(state["last_party_day"])
+	active_party = state.get("active_party", {}).duplicate(true)
+	police_pressure = state.get("police_pressure", {}).duplicate(true)
+	pursuit_incidents = int(state.get("pursuit_incidents", 0))
+	last_meeting_location = str(state.get("last_meeting_location", ""))
+	consecutive_location_meetings = int(state.get("consecutive_location_meetings", 0))
 	_next_id = int(state["next_id"])
 	_class_resolved_through = int(state["class_resolved_through"])
 	_next_message_minute = float(state["next_message_minute"])
@@ -1061,9 +1268,13 @@ func load_game(show_message: bool = true) -> bool:
 	world_state = _sanitize_world_state(state.get("world_state", {}))
 	_migrate_contact_timing()
 	var moved_suppliers: int = _migrate_supplier_schedule()
+	var expired_pressure: bool = _expire_police_pressure(false)
+	if not active_party.is_empty() and minute >= float(active_party["end_minute"]):
+		active_party["status"] = "ended"
+		for guest: Dictionary in active_party["guests"]: guest["status"] = "left"
 	paused = false
 	_low_food_warned = hunger < 20.0
-	_dirty = moved_suppliers > 0
+	_dirty = moved_suppliers > 0 or expired_pressure
 	if show_message: _notify("Progress restored. Day %d, %s." % [day_number(), time_text()])
 	if show_message and moved_suppliers > 0: _notify("Your supplier moved the daytime pickup to the next night window. Check the updated day and time in your agenda.")
 	changed.emit()
@@ -1156,7 +1367,48 @@ func _validate_save(state: Dictionary) -> bool:
 		if str(meeting["type"]) not in ["client", "supplier"] or not _valid_location(str(meeting["location_id"])): return false
 		if not _numeric_range(meeting["quantity"], 1.0, 99.0) or not _numeric_range(meeting["due_minute"], 0.0, 144000000.0): return false
 		if not _numeric_range(meeting["price"], 0.0, 1000.0) or not _numeric_range(meeting["cost"], 0.0, 100000.0): return false
-	return _validate_social_save(state)
+	return _validate_social_save(state) and _validate_party_pressure_save(state)
+
+func _validate_party_pressure_save(state: Dictionary) -> bool:
+	for field: String in ["pursuit_incidents", "consecutive_location_meetings"]:
+		if not _integer_range(state.get(field, 0), 0, 10000000): return false
+	var last_location: Variant = state.get("last_meeting_location", "")
+	if not last_location is String or (last_location != "" and not _valid_location(last_location)): return false
+	var areas: Variant = state.get("police_pressure", {})
+	if not areas is Dictionary or areas.size() > 6: return false
+	for location_id: Variant in areas:
+		if not location_id is String or not _valid_location(location_id): return false
+		var area: Variant = areas[location_id]
+		if not area is Dictionary: return false
+		if not _integer_range(area.get("watch_level"), 0, 2) or not _integer_range(area.get("incident_count"), 0, 10000000): return false
+		if not _numeric_range(area.get("last_bust_minute"), -1.0, 144000000.0) or not _numeric_range(area.get("expires_minute"), 0.0, 144001440.0): return false
+	var party: Variant = state.get("active_party", {})
+	if not party is Dictionary: return false
+	if party.is_empty(): return true
+	if not _integer_range(party.get("id"), 1, 100000000) or not _integer_range(party.get("night_day"), 0, 100000): return false
+	if not _numeric_range(party.get("start_minute"), 0.0, 144000000.0) or not _numeric_range(party.get("end_minute"), 0.0, 144000180.0): return false
+	var start: float = float(party["start_minute"])
+	var end: float = float(party["end_minute"])
+	if end <= start or end - start > 180.0: return false
+	var start_hour: float = fmod(start, MINUTES_PER_DAY)
+	if start_hour >= 120.0 and start_hour < 1020.0: return false
+	var closes: float = floorf(start / MINUTES_PER_DAY) * MINUTES_PER_DAY + (120.0 if start_hour < 120.0 else 1560.0)
+	if end > closes or party.get("status") not in ["active", "ended"]: return false
+	if not party.get("guests") is Array or party["guests"].size() > 8: return false
+	var known: Dictionary = {}
+	for contact: Dictionary in state["contacts"]: known[str(contact["id"])] = true
+	var seen: Dictionary = {}
+	for guest: Variant in party["guests"]:
+		if not guest is Dictionary or not guest.get("contact_id") is String or not guest.get("name") is String: return false
+		var contact_id: String = guest["contact_id"]
+		if not known.has(contact_id) or seen.has(contact_id) or guest["name"].length() > 1000: return false
+		seen[contact_id] = true
+		if not _numeric_range(guest.get("arrival_minute"), start, end): return false
+		if guest.get("status") not in ["invited", "inside", "left"]: return false
+		for flag: String in ["arrived", "chatted", "purchased"]:
+			if not guest.get(flag) is bool: return false
+		if (guest["chatted"] or guest["purchased"] or guest["status"] == "inside") and not guest["arrived"]: return false
+	return true
 
 func _validate_social_save(state: Dictionary) -> bool:
 	var intro_data: Variant = state.get("introductions", [])
@@ -1186,6 +1438,8 @@ func _validate_social_save(state: Dictionary) -> bool:
 		if not npc["name"] is String or not npc["contact_id"] is String or not npc["text"] is String: return false
 		if not _numeric_range(npc["next_offer_minute"], 0.0, 144000000.0) or not _numeric_range(npc["last_sale_minute"], -1.0, 144000000.0): return false
 		if not _numeric_range(npc["sales"], 0.0, 1000000.0): return false
+		for field: String in ["dialogue_seed", "talk_count"]:
+			if npc.has(field) and not _integer_range(npc[field], 0, 1000000000): return false
 	return true
 
 func _has_keys(value: Dictionary, keys: Array) -> bool:
@@ -1195,6 +1449,9 @@ func _has_keys(value: Dictionary, keys: Array) -> bool:
 
 func _numeric_range(value: Variant, minimum: float, maximum: float) -> bool:
 	return (value is float or value is int) and is_finite(float(value)) and float(value) >= minimum and float(value) <= maximum
+
+func _integer_range(value: Variant, minimum: int, maximum: int) -> bool:
+	return _numeric_range(value, float(minimum), float(maximum)) and fmod(float(value), 1.0) == 0.0
 
 func _sanitize_world_state(value: Variant) -> Dictionary:
 	var fallback: Dictionary = {"position": [20.0,0.3,50.0], "interior": ""}
@@ -1218,18 +1475,36 @@ func _sanitize_world_state(value: Variant) -> Dictionary:
 	result["pursuit_state"] = _sanitize_pursuit_state(value.get("pursuit_state",{}))
 	result["meeting_walks"] = _sanitize_meeting_walks(value.get("meeting_walks",[]))
 	result["informant_runs"] = _sanitize_informant_runs(value.get("informant_runs",[]))
+	result["party_walks"] = _sanitize_party_walks(value.get("party_walks",[]))
+	return result
+
+func _sanitize_party_walks(value: Variant) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if not value is Array or value.size() > 8: return result
+	var seen: Dictionary = {}
+	for entry: Variant in value:
+		if not entry is Dictionary or not entry.get("contact_id") is String: continue
+		var contact_id: String = entry["contact_id"]
+		if contact_id.is_empty() or contact_id.length() > 80 or seen.has(contact_id): continue
+		var phase: Variant = entry.get("state")
+		if phase not in ["approaching", "inside", "leaving"] or not _integer_range(entry.get("slot"), 0, 7): continue
+		var position_ok: bool = _valid_saved_position(entry.get("position", []), "home" if phase == "inside" else "")
+		if phase == "leaving": position_ok = position_ok or _valid_saved_position(entry.get("position", []), "home")
+		if not position_ok: continue
+		seen[contact_id] = true
+		result.append({"contact_id": contact_id, "state": phase, "position": entry["position"].duplicate(), "slot": int(entry["slot"])})
 	return result
 
 func _sanitize_informant_runs(value: Variant) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
-	if not value is Array or value.size() > 42: return result
+	if not value is Array or value.size() > 57: return result
 	var seen: Dictionary = {}
 	for entry: Variant in value:
 		if not entry is Dictionary or not entry.get("id") is String: continue
 		var npc_id: String = entry["id"]
 		if npc_id.length() != 10 or not npc_id.begins_with("citizen_") or not npc_id.substr(8).is_valid_int(): continue
 		var number: int = npc_id.substr(8).to_int()
-		if number < 0 or number >= 42 or npc_id != "citizen_%02d" % number or seen.has(npc_id): continue
+		if number < 0 or number >= 57 or npc_id != "citizen_%02d" % number or seen.has(npc_id): continue
 		if not _valid_saved_position(entry.get("position", []), "") or not _valid_saved_position(entry.get("report_position", []), ""): continue
 		if not entry.get("campus") is bool: continue
 		seen[npc_id] = true
@@ -1256,14 +1531,14 @@ func _sanitize_meeting_walks(value: Variant) -> Array[Dictionary]:
 
 func _sanitize_pursuit_state(value: Variant) -> Dictionary:
 	if not value is Dictionary or not value.get("officers") is Array: return {}
-	if value["officers"].size() != 7: return {}
+	if value["officers"].size() not in [7, 10]: return {}
 	for officer: Variant in value["officers"]:
 		if not officer is Dictionary or not _valid_saved_position(officer.get("position",[]),""): return {}
 		if not _numeric_range(officer.get("hp"),0.0,150.0): return {}
 		if not _numeric_range(officer.get("alert"),0.0,60.0) or not _numeric_range(officer.get("stun"),0.0,60.0): return {}
 		if not _numeric_range(officer.get("index"),0.0,1000.0): return {}
 	if not _numeric_range(value.get("arrest_seconds"),0.0,10.0): return {}
-	if not _numeric_range(value.get("escape_seconds"),0.0,60.0): return {}
+	if not _numeric_range(value.get("escape_seconds"),0.0,100000000.0): return {}
 	if not _numeric_range(value.get("crime_age"),0.0,10000000.0): return {}
 	if not _valid_saved_position(value.get("crime_position",[]),""): return {}
 	return value.duplicate(true)

@@ -45,6 +45,8 @@ Controllers use standard Xbox-style button names (equivalent positions on other 
 
 The phone supports controller selection, scrolling and scheduling. A opens a dropdown, directions select an option, and A confirms; B backs out. Menus display the control hints for the most recently used input device.
 
+On the supplier screen, focus the bundle quantity and use left/right to adjust it. Down moves directly to that supplier's **Arrange pickup** button; A confirms.
+
 Milo's first follow-up arrives about ninety game minutes after saving his number. After later sales, customers wait six to eight game hours, plus extra time for larger orders, before requesting more. Other contacts can still text during that interval.
 
 ## Systems
@@ -64,6 +66,12 @@ Milo's first follow-up arrives about ninety game minutes after saving his number
 - Morning, afternoon, evening, dusk and night lighting; warm shop and interior lights.
 - Furnished apartment, market, cafe, lecture hall and learning commons interiors.
 - Automatic and manual saves, resume, explicit restart, and terminal victory/loss screens.
+
+Parties can start at the apartment between 17:00 and 02:00 after reputation 5 and two contacts. Pay $25 for supplies, then invite up to eight contacts from the guest list. Guests walk to your door and gather inside for up to three hours, ending by 02:00. Catching up builds relationships; selling is a separate conversation choice and never consumes stock automatically.
+
+Two consecutive completed meetings at one location attract extra attention; three bring heavier patrols. New pursuits add local officers and increase the time you must remain unseen: 10, 10, 15, 20, 25, 30 seconds, then another 10 per pursuit. Extra local patrols leave after a full game day without another bust there. The outskirts now have their own walkers and patrol routes, and some residents walk to parked cars, drive a circuit and return to a vacant space.
+
+Skateboards retain normal speed on pavement but crawl on grass. NPC emotes accompany conversations, sales, missed meetings and police alerts; a casual greeting alone does not reveal whether someone will buy.
 
 ## Develop locally
 

@@ -3,6 +3,7 @@ extends Node3D
 var world: Node3D
 var player: StudentPlayer
 var population: CityPopulation
+var party_guests: Node3D
 var camera: Camera3D
 var sun: DirectionalLight3D
 var environment: Environment
@@ -53,6 +54,9 @@ func _ready() -> void:
 	population=CityPopulation.new()
 	add_child(population)
 	population.setup(world,player)
+	party_guests=load("res://scripts/party_guests.gd").new()
+	add_child(party_guests)
+	party_guests.setup(world,player,population)
 	player.attacked.connect(population.attack)
 	ui=load("res://scripts/interface.gd").new()
 	ui.game_root=self
@@ -61,6 +65,9 @@ func _ready() -> void:
 	Game.notification.connect(_on_notification)
 	Game.civilian_reaction.connect(_on_civilian_reaction)
 	Game.police_tip.connect(population.respond_to_tip)
+	Game.party_reaction.connect(_on_party_reaction)
+	Game.street_reaction.connect(population.play_citizen_emote)
+	Game.meeting_reaction.connect(population.play_contact_emote)
 	population.informant_reported.connect(_on_informant_reported)
 	Input.joy_connection_changed.connect(_on_controller_connection)
 	controller_active = not Input.get_connected_joypads().is_empty()
@@ -245,6 +252,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func start_game(resume:bool) -> void:
 	end_conversation()
+	party_guests.reset()
 	if resume:
 		if not Game.load_game():
 			Game.restart_game()
@@ -275,6 +283,7 @@ func _capture_world_state() -> void:
 	if population.has_method("capture_meeting_state"):
 		data.meeting_walks=population.capture_meeting_state()
 	data.informant_runs=population.capture_informant_state()
+	data.party_walks=party_guests.capture()
 	for car in population.vehicles:
 		if bool(car.get("owned",false)):
 			var parked:Vector3=car.node.position
@@ -322,6 +331,7 @@ func _restore_world_state() -> void:
 	population.restore_informant_state(data.get("informant_runs",[]))
 	for npc_id: String in Game.pending_civilian_reports():
 		population.start_informant_run(npc_id)
+	party_guests.restore(data.get("party_walks",[]))
 	_update_location()
 
 func _update_location() -> void:
@@ -344,6 +354,9 @@ func interaction_text() -> String:
 
 func _interaction_text() -> String:
 	if world.current_interior!="":
+		var guest: Dictionary=party_guests.nearest_guest()
+		if not guest.is_empty() and player.position.distance_to(world.get_interior_exit())>1.5:
+			return "E  Catch up with %s"%guest.name
 		if player.position.distance_to(world.get_interior_exit())<3.3:
 			return "E  Leave building"
 		return "E  Apartment options  •  B  Backpack" if world.current_interior=="home" else "E  "+("Campus services" if world.current_interior in ["classroom","library"] else "Shop here")
@@ -372,7 +385,12 @@ func _interaction_text() -> String:
 func interact() -> void:
 	_update_location()
 	if world.current_interior!="":
-		if player.position.distance_to(world.get_interior_exit())<3.3:
+		var guest: Dictionary=party_guests.nearest_guest()
+		if not guest.is_empty() and player.position.distance_to(world.get_interior_exit())>1.5:
+			conversation_id="party:"+str(guest.contact_id)
+			party_guests.conversation_contact=str(guest.contact_id)
+			_show_conversation()
+		elif player.position.distance_to(world.get_interior_exit())<3.3:
 			_teleport(world.exit_interior()+Vector3(0,0.3,0))
 		elif world.current_interior=="home":
 			ui.show_page("home")
@@ -429,6 +447,19 @@ func _conversation_target() -> Dictionary:
 
 func _show_conversation(response: String="") -> void:
 	if conversation_id=="": return
+	if conversation_id.begins_with("party:"):
+		var contact_id:=conversation_id.trim_prefix("party:")
+		if not party_guests.in_reach(contact_id):
+			ui.close_page()
+			end_conversation()
+			return
+		var party_context: Dictionary=Game.party_guest_view(contact_id)
+		party_context.actor_id=conversation_id
+		party_context.party_guest=true
+		party_context.district="Deerfield party"
+		if response!="": party_context.response=response
+		ui.show_conversation(party_context)
+		return
 	var citizen := population.nearest_conversational_npc(4.0)
 	if str(citizen.get("id",""))!=conversation_id:
 		end_conversation()
@@ -442,6 +473,16 @@ func _show_conversation(response: String="") -> void:
 
 func conversation_action(npc_id: String, action: String) -> void:
 	if npc_id!=conversation_id or conversation_id=="": return
+	if npc_id.begins_with("party:"):
+		var contact_id:=npc_id.trim_prefix("party:")
+		if action=="leave" or not party_guests.in_reach(contact_id):
+			ui.close_page()
+			end_conversation()
+			return
+		if action=="smalltalk": Game.chat_party_guest(contact_id)
+		elif action=="offer": Game.sell_party_guest(contact_id)
+		_show_conversation()
+		return
 	match action:
 		"leave":
 			ui.close_page()
@@ -454,23 +495,16 @@ func conversation_action(npc_id: String, action: String) -> void:
 			_show_conversation()
 		"smalltalk":
 			var citizen := population.nearest_conversational_npc(4.0)
-			var replies := {
-				"Heading to class":"I've got class soon. The walk across campus always takes longer than I think.",
-				"Lunch at College Square":"We're heading over for lunch. Have you tried the Night Owl yet?",
-				"Walking home with friends":"Just walking home with some friends. It's been a long day.",
-				"Study group at the residence":"I'm meeting my study group. We call it studying, but mostly we complain about deadlines.",
-				"Meeting friends at the quad":"Some friends are hanging out at the quad. Good weather for it.",
-				"Evening study group":"Another late study session. At least the library is quiet tonight.",
-				"Late takeout with friends":"We're hunting for something to eat before everything closes.",
-				"Heading home":"I'm heading home. An early lecture tomorrow is going to hurt.",
-				"Hanging out outside residence":"Just catching up outside residence. Everybody needed a break.",
-				"Hanging out near the parking lot":"Waiting on a friend over by the parking lot. They said five minutes..."
-			}
-			_show_conversation(str(replies.get(str(citizen.get("goal","")),"Just taking a break. How's your day going?")))
+			_show_conversation(Game.street_smalltalk(npc_id,str(citizen.get("goal",""))))
 
 func end_conversation() -> void:
 	conversation_id = ""
 	if is_instance_valid(population): population.end_conversation()
+	if is_instance_valid(party_guests): party_guests.conversation_contact=""
+
+func _on_party_reaction(contact_id: String, kind: String) -> void:
+	if is_instance_valid(party_guests) and party_guests.guests.has(contact_id):
+		load("res://scripts/npc_emote.gd").play(party_guests.guests[contact_id].node,kind)
 
 func _on_civilian_reaction(npc_id: String, reaction: String) -> void:
 	if reaction!="report": return

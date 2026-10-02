@@ -56,6 +56,44 @@ func _run() -> void:
 	var citizen:Dictionary=scene.population.citizens[0]
 	scene.ui.show_conversation(state.street_conversation(str(citizen.id),str(citizen.name)))
 	await _capture("street-conversation")
+	# Presentation fixtures for the live gathering. Walking and physical reach
+	# use their own integration tests; these views exercise the actual UI/state.
+	scene.ui.close_page()
+	for meeting:Dictionary in state.active_meetings(): state.cancel_meeting(int(meeting.id))
+	state.resolve_introduction(int(introduction.id),"accept")
+	state.reputation=8
+	state.cash=200
+	state.heat=0
+	state.minute=1090
+	scene.player.position=scene.world.get_landmark("home")
+	scene._update_location()
+	scene.ui.show_page("home")
+	await _capture("party-host")
+	state.host_party()
+	for contact:Dictionary in state.contacts: state.invite_party_contact(str(contact.id))
+	scene.ui.show_page("contacts")
+	await _capture("party-invitations")
+	state.minute+=30
+	for guest:Dictionary in state.party_summary().guests: state.party_guest_arrived(str(guest.contact_id))
+	scene.ui.show_page("contacts")
+	await _capture("party-guest-list")
+	var guest_id:String=str(state.contacts[0].id)
+	var context:Dictionary=state.party_guest_view(guest_id)
+	context.actor_id="party:"+guest_id
+	context.party_guest=true
+	context.district="Deerfield party"
+	scene.ui.show_conversation(context)
+	await _capture("party-conversation")
+	scene.ui.close_page()
+	scene.enter_building("home")
+	state.paused=true
+	scene.party_guests.reset()
+	scene.party_guests._sync()
+	for guest:Dictionary in scene.party_guests.guests.values():
+		load("res://scripts/npc_emote.gd").play(guest.node,"music" if int(guest.slot)%2==0 else "happy",4.0)
+	await create_timer(1.0).timeout
+	scene.ui.toast_timer=0
+	await _capture("party-emotes")
 	scene._release_audio(scene)
 	await create_timer(0.15).timeout
 	scene.queue_free()

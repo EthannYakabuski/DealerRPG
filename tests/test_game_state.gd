@@ -266,7 +266,12 @@ func _test_feedback_events() -> void:
 	game.player_location_id = "home"
 	var cash_before: float = game.cash
 	game.host_party()
-	_check(_feedback_count("party", game.cash - cash_before) == 1, "party cue includes net proceeds after supplies")
+	_check(_feedback_count("purchase", -25.0) == 1 and game.cash == cash_before - 25.0, "party setup is a supplies purchase without automatic sale proceeds")
+	game.invite_party_contact("milo")
+	game.advance_time(float(game.party_summary()["guests"][0]["arrival_minute"]) - game.minute)
+	game.mark_party_guest_arrived("milo")
+	game.sell_party_guest("milo")
+	_check(_feedback_count("party", 24.0) == 1, "explicit guest sale reports its exact cash proceeds")
 
 func _feedback_count(kind: String, value: float) -> int:
 	var count: int = 0
@@ -358,9 +363,9 @@ func _test_party_and_unlocks() -> void:
 	game.inventory["dime_bag"] = 12
 	game.minute = 1020.0
 	var old_cash: float = game.cash
-	_check(game.host_party(), "evening party succeeds with contacts and stock")
-	_check(game.cash > old_cash and game.parties_hosted == 1 and game.reputation == 8, "party drives money reputation and social loop")
-	_check(not game.host_party(), "parties limited to one per day")
+	_check(game.host_party(), "evening party starts with contacts and supplies")
+	_check(game.cash == old_cash - 25.0 and game.parties_hosted == 1 and game.reputation == 5 and game.inventory["dime_bag"] == 12 and game.minute == 1020.0, "party setup charges supplies without moving stock reputation or clock")
+	_check(not game.host_party(), "cannot start a second active party")
 	game.player_location_id = "car_park"
 	game.cash = 1500.0
 	_check(not game.purchase_vehicle(), "car ownership gated until late game")
