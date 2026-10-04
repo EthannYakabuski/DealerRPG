@@ -184,10 +184,12 @@ func _test_pressure() -> void:
 	game._expire_police_pressure()
 	_check(not game.police_pressure_locations().is_empty(), "local reinforcement lasts the entire quiet day")
 	game.register_pursuit("cafe")
-	_check(game.police_pressure_locations()[0]["expires_minute"] == game.minute + 1440.0 and game.escape_duration_seconds() == 60.0, "new bust refreshes local deadline and raises permanent escape duration")
+	_check(game.police_pressure_locations()[0]["expires_minute"] == game.minute + 1440.0 and game.escape_duration_seconds() == 30.0, "new bust refreshes local deadline and uses the two-step daily recovery")
 	game.minute += 1440.0
 	game._expire_police_pressure()
-	_check(game.police_pressure_locations().is_empty() and game.last_meeting_location == "" and game.escape_duration_seconds() == 60.0, "quiet-day expiry removes local patrols but retains global incident history")
+	_check(game.police_pressure_locations().is_empty() and game.last_meeting_location == "" and game.escape_duration_seconds() == 30.0, "quiet-day expiry removes local patrols but does not shorten an active pursuit")
+	game.end_pursuit()
+	_check(game.escape_duration_seconds() == 20.0 and game.pursuit_incidents == 9, "ending pursuit exposes recovered daily tier while lifetime incidents remain recorded")
 
 func _test_reactions() -> void:
 	_fresh()
@@ -260,6 +262,7 @@ func _test_save_compatibility() -> void:
 	expired["minute"] = expired["active_party"]["end_minute"]
 	expired["police_pressure"] = {"home":{"watch_level":2,"incident_count":1,"last_bust_minute":600.0,"expires_minute":1100.0}}
 	expired["pursuit_incidents"] = 3
+	for field: String in ["pursuit_step","pursuit_decay_day","pursuit_decay_pending","active_pursuit_escape_seconds"]: expired.erase(field)
 	_write(expired)
 	events.clear()
 	emotions.clear()

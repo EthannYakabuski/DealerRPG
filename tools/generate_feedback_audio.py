@@ -73,6 +73,12 @@ def generate(kind: str, duration: float, seed: int) -> None:
             value = tone(t, 0., .34, 78, .45, 6, .2)
             if t < .33:
                 value += (filtered * .45 + noise * .08) * math.exp(-t * 11)
+        elif kind == "police_shot":
+            # A short dry crack with a low body and a restrained outdoor tail.
+            attack = min(1., t / .0015)
+            value = attack * (noise * .7 * math.exp(-t * 65)
+                              + filtered * .55 * math.exp(-t * 15))
+            value += tone(t, 0., .18, 105, .25, 9, .08)
         elif kind == "consume":
             value = tone(t, .16, .36, 523, .16, 4)
             if t < .14:
@@ -103,7 +109,8 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     durations = {"pack": .64, "sale": .65, "purchase": .45, "text": .52,
                  "detected": .63, "caught": .92, "consume": .58,
-                 "tuition": .95, "class": .84, "party": .85, "impact": .42}
+                 "tuition": .95, "class": .84, "party": .85, "impact": .42,
+                 "police_shot": .28}
     for seed, (kind, duration) in enumerate(durations.items(), start=801):
         generate(kind, duration, seed)
 

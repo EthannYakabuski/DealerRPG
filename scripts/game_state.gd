@@ -20,6 +20,7 @@ const TIME_SCALE: float = 3.0
 const MINUTES_PER_DAY: float = 1440.0
 const MEETING_WINDOW: float = 25.0
 const MEETING_ARRIVAL_MINUTES: float = 12.0
+const SUPPLIER_ARRIVAL_MINUTES: float = 15.0
 const CLASS_START: float = 540.0
 const CLASS_DEADLINE: float = 600.0
 const CLASS_END: float = 660.0
@@ -53,6 +54,10 @@ var npc_party_invites: Array[Dictionary] = []
 var last_party_invite_day: int = 0
 var police_pressure: Dictionary = {}
 var pursuit_incidents: int = 0
+var pursuit_step: int = 0
+var pursuit_decay_day: int = 1
+var pursuit_decay_pending: bool = false
+var active_pursuit_escape_seconds: float = 0.0
 var last_meeting_location: String = ""
 var consecutive_location_meetings: int = 0
 var status: String = "playing"
@@ -118,6 +123,10 @@ func restart_game(delete_save: bool = true) -> void:
 	last_party_invite_day = 0
 	police_pressure.clear()
 	pursuit_incidents = 0
+	pursuit_step = 0
+	pursuit_decay_day = 1
+	pursuit_decay_pending = false
+	active_pursuit_escape_seconds = 0.0
 	last_meeting_location = ""
 	consecutive_location_meetings = 0
 	status = "playing"
@@ -189,10 +198,7 @@ func current_objective() -> String:
 	return "Read your texts, choose your meetings, and pay off $%d in tuition." % int(ceil(tuition_remaining))
 
 func available_locations() -> Array[Dictionary]:
-	var locations: Array[Dictionary] = []
-	for location: Dictionary in Data.LOCATIONS:
-		if not bool(location.get("supplier_only", false)) and not bool(location.get("party_only", false)): locations.append(location.duplicate(true))
-	return locations
+	return Data.LOCATIONS.duplicate(true)
 
 func supplier_catalog() -> Array[Dictionary]:
 	var result: Array[Dictionary] = Data.SUPPLIERS.duplicate(true)
@@ -292,13 +298,15 @@ func split_flower() -> bool:
 	if not _can_act(): return false
 	if int(inventory.get("flower", 0)) < 1:
 		return _fail("You need a flower bundle. Arrange a supplier meeting on your phone.")
+	var packed_weight: float = inventory_weight() - float(Data.ITEMS["flower"]["weight"]) + Data.BAGS_PER_BUNDLE * float(Data.ITEMS["dime_bag"]["weight"])
+	if packed_weight > Data.BACKPACK_CAPACITY + 0.0001: return _fail("Make a little room in your backpack before packing seven bags.")
 	var old_bags: int = int(inventory["dime_bag"])
 	dime_quality = (dime_quality * old_bags + flower_quality * Data.BAGS_PER_BUNDLE) / float(old_bags + Data.BAGS_PER_BUNDLE)
 	inventory["flower"] = int(inventory["flower"]) - 1
 	inventory["dime_bag"] = old_bags + Data.BAGS_PER_BUNDLE
 	if tutorial_step == 0:
 		tutorial_step = 1
-	_notify("Packed six dime bags into your backpack.")
+	_notify("Packed %d dime bags into your backpack." % Data.BAGS_PER_BUNDLE)
 	feedback_event.emit("pack", 0.0)
 	_mark_changed()
 	return true
@@ -331,10 +339,46 @@ func add_tutorial_contact() -> bool:
 	save_game()
 	return true
 
+func available_meeting_slots(contact_id: String = "") -> Array[Dictionary]:
+	var candidates: Array[float] = [minute + 30.0, minute + 480.0]
+	var after_labels: Dictionary = {}
+	var grid: float = ceilf((minute + 30.0) / 30.0) * 30.0
+	while grid <= minute + 480.0:
+		candidates.append(grid)
+		grid += 30.0
+	for meeting: Dictionary in active_meetings():
+		var due: float = float(meeting["due_minute"])
+		candidates.append(due - 30.0)
+		candidates.append(due + 30.0)
+		after_labels[due + 30.0] = str(meeting["contact_name"])
+	candidates.sort()
+	var result: Array[Dictionary] = []
+	for due: float in candidates:
+		if due < minute + 30.0 - 0.00001 or due > minute + 480.0 + 0.00001: continue
+		if not result.is_empty() and absf(due - float(result.back()["due_minute"])) < 0.00001: continue
+		if not _meeting_time_error(due, contact_id).is_empty(): continue
+		var label: String = format_minute(due)
+		if int(due / MINUTES_PER_DAY) + 1 != day_number(): label = "Day %d, %s" % [int(due / MINUTES_PER_DAY) + 1, label]
+		if after_labels.has(due): label += " · 30 min after %s" % str(after_labels[due])
+		result.append({"due_minute":due,"delay_minutes":due-minute,"label":label})
+	return result
+
+func _meeting_time_error(due: float, contact_id: String) -> String:
+	if bool(party_summary()["active"]) and not _party_guest(contact_id).is_empty() and due <= float(active_party["end_minute"]) + 15.0: return "They're coming to your party. Arrange the meeting at least 15 minutes after it ends."
+	for invite: Dictionary in npc_party_invites:
+		if invite["status"] == "accepted" and invite["host_id"] == contact_id and due >= float(invite["start_minute"]) - 45.0 and due <= float(invite["end_minute"]) + 15.0: return "They're hosting the party you've accepted. Choose a time outside the party."
+	if _overlaps_class(due): return "That time conflicts with class. Choose another time."
+	for meeting: Dictionary in active_meetings():
+		if absf(float(meeting["due_minute"]) - due) < 30.0 - 0.00001: return "Leave at least 30 minutes between meetings."
+	return ""
+
+func schedule_meeting_at(message_id: int, location_id: String, due_minute: float, price: float = 22.0) -> bool:
+	return schedule_meeting(message_id, location_id, due_minute - minute, price)
+
 func schedule_meeting(message_id: int, location_id: String, delay_minutes: float = 90.0, price: float = 22.0) -> bool:
 	if not _can_act() or tutorial_step < 3: return false
 	if not _valid_location(location_id): return _fail("Choose a real meeting location.")
-	if not is_finite(delay_minutes) or delay_minutes < 30.0 or delay_minutes > 480.0:
+	if not is_finite(delay_minutes) or delay_minutes < 30.0 - 0.00001 or delay_minutes > 480.0 + 0.00001:
 		return _fail("Meetings must be scheduled 30–480 minutes from now.")
 	if not is_finite(price) or price < 12.0 or price > 40.0:
 		return _fail("Choose a price from $12 to $40 per bag.")
@@ -346,14 +390,8 @@ func schedule_meeting(message_id: int, location_id: String, delay_minutes: float
 			return _fail("That request has expired or was already answered.")
 		if price > float(message.get("max_price", 40.0)): return _fail("They only agreed to the discounted price of $%d or less." % int(message["max_price"]))
 		var due: float = minute + delay_minutes
-		if bool(party_summary()["active"]) and not _party_guest(str(message["contact_id"])).is_empty() and due <= float(active_party["end_minute"]) + 15.0:
-			return _fail("They're coming to your party. Arrange the meeting at least 15 minutes after it ends.")
-		for invite: Dictionary in npc_party_invites:
-			if invite["status"] == "accepted" and invite["host_id"] == message["contact_id"] and due >= float(invite["start_minute"]) - 45.0 and due <= float(invite["end_minute"]) + 15.0: return _fail("They're hosting the party you've accepted. Choose a time outside the party.")
-		if _overlaps_class(due): return _fail("That time conflicts with class. Choose another time.")
-		for meeting: Dictionary in meetings:
-			if meeting["status"] == "scheduled" and absf(float(meeting["due_minute"]) - due) < 30.0:
-				return _fail("Leave at least 30 minutes between meetings.")
+		var timing_error: String = _meeting_time_error(due, str(message["contact_id"]))
+		if not timing_error.is_empty(): return _fail(timing_error)
 		message["status"] = "accepted"
 		var quantity: int = int(message["quantity"])
 		meetings.append({"id": _new_id(), "type": "client", "contact_id": message["contact_id"], "contact_name": message["contact_name"], "location_id": location_id, "due_minute": due, "quantity": quantity, "price": price, "cost": 0.0, "tier": -1, "quality": 0.0, "status": "scheduled", "created_minute": minute, "message_id": message_id})
@@ -369,6 +407,9 @@ func active_meetings() -> Array[Dictionary]:
 	result.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["due_minute"]) < float(b["due_minute"]))
 	return result
 
+func meeting_arrival_minutes(meeting: Dictionary) -> float:
+	return SUPPLIER_ARRIVAL_MINUTES if meeting.get("type", "client") == "supplier" else MEETING_ARRIVAL_MINUTES
+
 func complete_meeting(meeting_id: int) -> bool:
 	if not _can_act(): return false
 	for meeting: Dictionary in meetings:
@@ -376,7 +417,7 @@ func complete_meeting(meeting_id: int) -> bool:
 		if meeting["status"] != "scheduled": return _fail("That meeting is already finished.")
 		if player_location_id != str(meeting["location_id"]): return _fail("Head to %s for this meeting." % Data.location_name(str(meeting["location_id"])))
 		var lateness: float = minute - float(meeting["due_minute"])
-		if lateness < -MEETING_ARRIVAL_MINUTES: return _fail("You're early. They arrive around %s." % format_minute(float(meeting["due_minute"]) - MEETING_ARRIVAL_MINUTES))
+		if lateness < -meeting_arrival_minutes(meeting): return _fail("You're early. They arrive around %s." % format_minute(float(meeting["due_minute"]) - meeting_arrival_minutes(meeting)))
 		if lateness > _meeting_grace(meeting): return _fail("You missed this meeting. Check your phone for another opportunity.")
 		if meeting["type"] == "supplier":
 			return _complete_supplier(meeting)
@@ -467,7 +508,10 @@ func supplier_order(tier: int = 0, bundles: int = 1, source_message_id: int = -1
 
 func _complete_supplier(meeting: Dictionary) -> bool:
 	var time_of_day: float = fmod(minute, MINUTES_PER_DAY)
-	if time_of_day >= 120.0 and time_of_day < 1320.0: return _fail("Supplier handoffs only happen between 22:00 and 02:00. Wait for opening or arrange another night.")
+	var due: float = float(meeting["due_minute"])
+	var due_time: float = fmod(due, MINUTES_PER_DAY)
+	var early_arrival: bool = minute >= due - SUPPLIER_ARRIVAL_MINUTES and minute < due and (due_time < 120.0 or due_time >= 1320.0)
+	if time_of_day >= 120.0 and time_of_day < 1320.0 and not early_arrival: return _fail("Supplier pickups are booked between 22:00 and 02:00. If they arrive early, you can trade up to 15 minutes before the appointment.")
 	var quantity: int = int(meeting["quantity"])
 	var cost: float = float(meeting["cost"])
 	if cash < cost: return _fail("You need $%d to close this deal." % int(cost))
@@ -889,6 +933,7 @@ func advance_time(minutes: float) -> void:
 		_resolve_party()
 		_resolve_party_invitations()
 		_expire_police_pressure()
+		_apply_pursuit_decay()
 		if tutorial_step >= 3:
 			_process_callbacks()
 			_generate_messages()
@@ -926,6 +971,11 @@ func register_pursuit(location_id: String) -> void:
 	if not _can_act() or not _valid_location(location_id): return
 	_expire_police_pressure()
 	pursuit_incidents += 1
+	_apply_pursuit_decay()
+	pursuit_step = maxi(1, pursuit_step) if pursuit_decay_pending else pursuit_step + 1
+	pursuit_decay_pending = false
+	active_pursuit_escape_seconds = _escape_seconds_for_step(pursuit_step)
+	world_state["pursuit"] = true
 	var area: Dictionary = _pressure_area(location_id)
 	area["incident_count"] = int(area["incident_count"]) + 1
 	area["last_bust_minute"] = minute
@@ -934,9 +984,30 @@ func register_pursuit(location_id: String) -> void:
 	_mark_changed()
 
 func escape_duration_seconds() -> float:
-	if pursuit_incidents <= 2: return 10.0
-	if pursuit_incidents <= 6: return 10.0 + float(pursuit_incidents - 2) * 5.0
-	return 30.0 + float(pursuit_incidents - 6) * 10.0
+	_apply_pursuit_decay()
+	return active_pursuit_escape_seconds if active_pursuit_escape_seconds > 0.0 else _escape_seconds_for_step(pursuit_step)
+
+func _escape_seconds_for_step(step: int) -> float:
+	if step <= 2: return 10.0
+	if step <= 6: return 10.0 + float(step - 2) * 5.0
+	return 30.0 + float(step - 6) * 10.0
+
+func _apply_pursuit_decay() -> bool:
+	var elapsed: int = day_number() - pursuit_decay_day
+	if elapsed <= 0: return false
+	var before: int = pursuit_step
+	pursuit_step = maxi(0, pursuit_step - elapsed * 2)
+	pursuit_decay_pending = pursuit_decay_pending or pursuit_step < before
+	pursuit_decay_day = day_number()
+	_dirty = true
+	return true
+
+func end_pursuit() -> void:
+	if active_pursuit_escape_seconds <= 0.0: return
+	active_pursuit_escape_seconds = 0.0
+	world_state["pursuit"] = false
+	_apply_pursuit_decay()
+	_mark_changed()
 
 func police_pressure_locations() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
@@ -1364,7 +1435,7 @@ func postpone_meeting(meeting_id: int, delay_minutes: float = 120.0) -> bool:
 	for meeting: Dictionary in meetings:
 		if int(meeting["id"]) != meeting_id or meeting["status"] != "scheduled": continue
 		if player_location_id != str(meeting["location_id"]): return _fail("Speak to them at the meeting to postpone without a penalty.")
-		if minute < float(meeting["due_minute"]) - MEETING_ARRIVAL_MINUTES or minute > float(meeting["due_minute"]) + _meeting_grace(meeting): return _fail("They aren't available at the meeting yet.")
+		if minute < float(meeting["due_minute"]) - meeting_arrival_minutes(meeting) or minute > float(meeting["due_minute"]) + _meeting_grace(meeting): return _fail("They aren't available at the meeting yet.")
 		meeting["status"] = "postponed"
 		var kind: String = str(meeting["type"])
 		var due: float = _next_business_minute(minute + delay_minutes) if kind == "client" else next_supplier_minute(minute + delay_minutes)
@@ -1438,6 +1509,7 @@ func _mark_changed() -> void:
 	changed.emit()
 
 func save_game() -> bool:
+	_apply_pursuit_decay()
 	var state: Dictionary = {
 		"version": Data.SAVE_VERSION, "calendar_version": 1, "cash": cash, "tuition_remaining": tuition_remaining,
 		"health": health, "hunger": hunger, "energy": energy, "heat": heat,
@@ -1451,6 +1523,8 @@ func save_game() -> bool:
 		"active_party": active_party, "police_pressure": police_pressure,
 		"supplier_progress": supplier_progress, "npc_party_invites": npc_party_invites, "last_party_invite_day": last_party_invite_day,
 		"pursuit_incidents": pursuit_incidents, "last_meeting_location": last_meeting_location,
+		"pursuit_step": pursuit_step, "pursuit_decay_day": pursuit_decay_day, "pursuit_decay_pending": pursuit_decay_pending,
+		"active_pursuit_escape_seconds": active_pursuit_escape_seconds,
 		"consecutive_location_meetings": consecutive_location_meetings,
 		"next_id": _next_id, "class_resolved_through": _class_resolved_through,
 		"next_message_minute": _next_message_minute, "player_location_id": player_location_id,
@@ -1507,6 +1581,10 @@ func load_game(show_message: bool = true) -> bool:
 	last_party_invite_day = int(state.get("last_party_invite_day", 0))
 	police_pressure = state.get("police_pressure", {}).duplicate(true)
 	pursuit_incidents = int(state.get("pursuit_incidents", 0))
+	pursuit_step = int(state.get("pursuit_step", pursuit_incidents))
+	pursuit_decay_day = int(state.get("pursuit_decay_day", day_number()))
+	pursuit_decay_pending = bool(state.get("pursuit_decay_pending", false))
+	active_pursuit_escape_seconds = float(state.get("active_pursuit_escape_seconds", 0.0))
 	last_meeting_location = str(state.get("last_meeting_location", ""))
 	consecutive_location_meetings = int(state.get("consecutive_location_meetings", 0))
 	_next_id = int(state["next_id"])
@@ -1514,11 +1592,17 @@ func load_game(show_message: bool = true) -> bool:
 	_next_message_minute = float(state["next_message_minute"])
 	player_location_id = str(state.get("player_location_id", "campus_quad"))
 	world_state = _sanitize_world_state(state.get("world_state", {}))
+	if str(world_state.get("interior", "")) != "": world_state["pursuit"] = false
+	if bool(world_state.get("pursuit", false)):
+		if active_pursuit_escape_seconds <= 0.0: active_pursuit_escape_seconds = _escape_seconds_for_step(pursuit_step)
+	else:
+		active_pursuit_escape_seconds = 0.0
 	_migrate_contact_timing()
 	var moved_suppliers: int = _migrate_supplier_schedule()
 	var moved_classes: int = _migrate_class_meetings() if not state.has("calendar_version") else 0
 	_migrate_supplier_callbacks()
 	var expired_pressure: bool = _expire_police_pressure(false)
+	var decayed_pursuit: bool = _apply_pursuit_decay()
 	if not active_party.is_empty() and minute >= float(active_party["end_minute"]):
 		active_party["status"] = "ended"
 		for guest: Dictionary in active_party["guests"]: guest["status"] = "left"
@@ -1526,7 +1610,7 @@ func load_game(show_message: bool = true) -> bool:
 		if minute >= float(invite["end_minute"]): invite["status"] = "ended" if invite["status"] == "active" else "expired"
 	paused = false
 	_low_food_warned = hunger < 20.0
-	_dirty = moved_suppliers > 0 or moved_classes > 0 or expired_pressure
+	_dirty = moved_suppliers > 0 or moved_classes > 0 or expired_pressure or decayed_pursuit
 	if show_message: _notify("Progress restored. Day %d, %s." % [day_number(), time_text()])
 	if show_message and moved_suppliers > 0: _notify("Your supplier moved the daytime pickup to the next night window. Check the updated day and time in your agenda.")
 	if show_message and moved_classes > 0: _notify("Your class timetable changed. Conflicting appointments moved after class; check your agenda for their new times.")
@@ -1701,6 +1785,11 @@ func _validate_supplier_party_save(state: Dictionary) -> bool:
 func _validate_party_pressure_save(state: Dictionary) -> bool:
 	for field: String in ["pursuit_incidents", "consecutive_location_meetings"]:
 		if not _integer_range(state.get(field, 0), 0, 10000000): return false
+	if not _integer_range(state.get("pursuit_step", state.get("pursuit_incidents", 0)), 0, 10000000): return false
+	if state.has("pursuit_decay_day") and not _integer_range(state["pursuit_decay_day"], 1, int(float(state["minute"]) / MINUTES_PER_DAY) + 1): return false
+	if not state.get("pursuit_decay_pending", false) is bool: return false
+	var active_escape: Variant = state.get("active_pursuit_escape_seconds", 0.0)
+	if not _numeric_range(active_escape, 0.0, 100000000.0) or (float(active_escape) > 0.0 and float(active_escape) < 10.0): return false
 	var last_location: Variant = state.get("last_meeting_location", "")
 	if not last_location is String or (last_location != "" and not _valid_location(last_location)): return false
 	var areas: Variant = state.get("police_pressure", {})

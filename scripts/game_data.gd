@@ -4,9 +4,9 @@ extends RefCounted
 const SAVE_VERSION: int = 2
 const STARTING_TUITION: float = 3500.0
 const BACKPACK_CAPACITY: float = 14.0
-const BAGS_PER_BUNDLE: int = 6
+const BAGS_PER_BUNDLE: int = 7
 const ITEMS: Dictionary = {
-	"flower": {"name": "Flower bundle", "weight": 0.8, "price": 0, "description": "A fictional game bundle. Split into six dime bags."},
+	"flower": {"name": "Flower bundle", "weight": 0.8, "price": 0, "description": "A fictional game bundle. Split into seven dime bags."},
 	"dime_bag": {"name": "Dime bag", "weight": 0.12, "price": 0, "description": "One abstract sale item. Quality carries over from its bundle."},
 	"sandwich": {"name": "Sandwich", "weight": 0.45, "price": 8, "description": "Restores 48 hunger and a little health."},
 	"energy_drink": {"name": "Energy drink", "weight": 0.35, "price": 6, "description": "Restores 65 energy and 8 hunger."},
@@ -26,11 +26,17 @@ const LOCATIONS: Array[Dictionary] = [
 	{"id": "cafe", "name": "Takeout patio", "district": "Commercial"},
 	{"id": "home", "name": "Deerfield apartment", "district": "Residential"},
 	{"id": "market", "name": "College Square market", "district": "Commercial"},
-	{"id": "car_park", "name": "West parking lot", "district": "Commercial"},
-	{"id": "west_overlook", "name": "West trail overlook", "district": "Campus", "supplier_only": true},
-	{"id": "service_lane", "name": "Freight lane", "district": "Commercial", "supplier_only": true},
-	{"id": "east_trail", "name": "East trail shelter", "district": "Residential", "supplier_only": true},
-	{"id": "deerfield_social", "name": "Deerfield neighbors", "district": "Residential", "party_only": true},
+	{"id": "car_park", "name": "West parking lot", "district": "Campus"},
+	{"id": "classroom", "name": "Lecture hall entrance", "district": "Campus"},
+	{"id": "supplier", "name": "Service yard", "district": "Commercial"},
+	{"id": "auto_dealer", "name": "Second Hand Motors", "district": "Commercial"},
+	{"id": "skate_park", "name": "Deerfield skate spot", "district": "Residential"},
+	{"id": "bus_stop", "name": "Baseline transit", "district": "Commercial"},
+	{"id": "residence", "name": "Student residence", "district": "Campus"},
+	{"id": "west_overlook", "name": "West trail overlook", "district": "Campus"},
+	{"id": "service_lane", "name": "Freight lane", "district": "Commercial"},
+	{"id": "east_trail", "name": "East trail shelter", "district": "Residential"},
+	{"id": "deerfield_social", "name": "Deerfield neighbors", "district": "Residential"},
 ]
 const CONTACT_NAMES: Array[String] = ["Milo", "Jules", "Nia", "Dev", "Avery", "Sam", "Tessa", "Rowan", "Casey", "Morgan", "Lee", "Emery"]
 const CONTACT_COURSES: Array[String] = ["architecture", "culinary arts", "animation", "computer science", "photography", "music production", "design", "journalism", "accounting", "film", "engineering", "hospitality"]

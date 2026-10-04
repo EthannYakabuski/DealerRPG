@@ -38,6 +38,10 @@ func _run() -> void:
 	await _test_officers()
 	await _test_cruiser()
 	await _test_transactions_and_pursuit()
+	await _test_road_skating()
+	await _test_melee_stun()
+	await _test_police_fire()
+	await _test_cruiser_routes()
 	scene.queue_free()
 	await process_frame
 	await process_frame
@@ -67,6 +71,8 @@ func _reset(at: Vector3 = CAMPUS) -> void:
 		officer.nav_path = PackedVector3Array()
 		officer.nav_index = 0
 		officer.nav_target = Vector3.INF
+		officer.shot_cooldown = 0.0
+		officer.aim_seconds = 0.0
 	for car: Dictionary in population.vehicles:
 		if bool(car.get("police",false)):
 			car.node.position = Vector3(135,0.2,-110)
@@ -217,3 +223,192 @@ func _test_transactions_and_pursuit() -> void:
 	_place(officer,Vector3(0,0,-8),Vector3.FORWARD)
 	game.report_crime(65.0)
 	_check(population.pursuit and officer.alert>0.0,"loud crime or a reported sting dispatches independently of visual facing")
+
+func _test_road_skating() -> void:
+	var road: PackedVector3Array = world.map_roads[1]
+	var at: Vector3 = road[0].lerp(road[1],0.45)+Vector3.UP*0.2
+	var direction := (road[1]-road[0]).normalized()
+	var side := Vector3(-direction.z,0,direction.x)
+	_reset(at)
+	player.skateboarding = true
+	_place(population.police[4],Vector3(0,0,-2),Vector3.BACK)
+	population._update_police(0.1,false)
+	_check(not population.pursuit,"foot patrols do not independently cite road skating")
+	var cruiser: Dictionary = {}
+	for car: Dictionary in population.vehicles:
+		if bool(car.get("police",false)) and not car.parked: cruiser = car
+	cruiser.node.position = at-direction*8.0
+	cruiser.node.rotation.y = population._heading(direction)
+	await physics_frame
+	population._update_police(0.1,false)
+	_check(population.pursuit,"a cruiser spots skateboarding on the actual carriageway")
+	_reset(at+side*6.4)
+	player.skateboarding = true
+	cruiser.node.position = player.position-direction*8.0
+	cruiser.node.rotation.y = population._heading(direction)
+	await physics_frame
+	population._update_police(0.1,false)
+	_check(not population.pursuit,"riding the parallel sidewalk is not a road-skating offense")
+	var crossing: Dictionary = world.crosswalks[2]
+	_reset(crossing.center+Vector3.UP*0.2)
+	player.skateboarding = true
+	cruiser.node.position = player.position-crossing.tangent*8.0
+	cruiser.node.rotation.y = population._heading(crossing.tangent)
+	await physics_frame
+	population._update_police(0.1,false)
+	_check(not population.pursuit,"using an authored pedestrian crossing does not trigger a skating pursuit")
+
+func _test_melee_stun() -> void:
+	_reset()
+	var officer: Dictionary = population.police[0]
+	_place(officer,Vector3(0,0,1.4),Vector3.FORWARD)
+	player.facing = Vector3.BACK
+	population.pursuit = true
+	game.active_pursuit_escape_seconds = 25.0
+	population.arrest_seconds = 2.2
+	await physics_frame
+	population.attack("punch")
+	_check(is_equal_approx(float(officer.stun),1.0),"a successful punch gives a pursuing officer one full second of stun")
+	var before: Vector3 = officer.node.position
+	var health: float = game.health
+	for tick in 9: population._update_police(0.1,false)
+	_check(officer.node.position.distance_to(before)<0.001 and officer.node.velocity==Vector3.ZERO,"a stunned officer cannot move or physically continue the pursuit")
+	_check(population.arrest_seconds<2.2 and game.status=="playing" and game.health==health,"stun prevents arrest progress and police fire")
+	population.pursuit = false
+	game.report_crime(14.0)
+	_check(not population.pursuit,"the stunned officer also cannot witness a new handoff")
+	population.pursuit = true
+	population._update_police(0.11,false)
+	population._update_police(0.1,false)
+	_check(officer.stun==0.0 and officer.node.position.distance_to(before)>0.01,"the officer can resume moving after the stun expires")
+	_place(officer,Vector3(0,0,1.5),Vector3.FORWARD)
+	population.attack("kick")
+	_check(is_equal_approx(float(officer.stun),1.0),"a successful kick gets the same full-second police stun")
+
+func _test_police_fire() -> void:
+	_reset()
+	var officer: Dictionary = population.police[0]
+	_place(officer,Vector3(0,0,-12),Vector3.BACK)
+	population.pursuit = true
+	game.active_pursuit_escape_seconds = 20.0
+	population._update_police_fire(officer,1.0,true,12.0)
+	_check(game.health==100.0,"officers do not shoot below the 25-second escape tier")
+	game.active_pursuit_escape_seconds = 25.0
+	population._update_police_fire(officer,0.4,true,12.0)
+	_check(game.health==100.0 and officer.weapon.visible,"the first police shot has a visible aiming windup")
+	population._update_police_fire(officer,0.4,true,12.0)
+	_check(game.health==91.0 and population.get_node_or_null("PoliceShot")!=null,"tier25 fire applies a bounded hit with a visible tracer")
+	population._update_police_fire(officer,1.0,true,12.0)
+	_check(game.health==91.0,"one officer cannot fire repeatedly during its cooldown")
+	officer.shot_cooldown = 0.0
+	officer.aim_seconds = 0.0
+	population._update_police_fire(officer,1.0,false,12.0)
+	_check(game.health==91.0 and not officer.weapon.visible,"losing sight cancels aim rather than scheduling a later hit")
+	var wall := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(8,3,0.5)
+	shape.shape = box
+	wall.add_child(shape)
+	wall.position = player.position+Vector3(0,1,-6)
+	scene.add_child(wall)
+	await physics_frame
+	population._update_police_fire(officer,1.0,true,12.0)
+	_check(game.health==91.0,"a wall appearing during aim prevents the shot even with a stale sight flag")
+	wall.queue_free()
+	await physics_frame
+	population.pursuit = false
+	population._update_police_fire(officer,1.0,true,12.0)
+	_check(game.health==91.0,"peaceful officers do not shoot merely because the campaign tier is high")
+
+func _test_cruiser_routes() -> void:
+	game.restart_game()
+	game.set_process(false)
+	population.reset_population()
+	population.set_physics_process(false)
+	player.position = Vector3(-59,0.2,18)
+	var cruiser: Dictionary = {}
+	for car: Dictionary in population.vehicles:
+		if bool(car.get("police",false)) and not car.parked: cruiser = car
+	cruiser.node.position = Vector3(-137,0.16,-30)
+	cruiser.node.rotation.y = 0.0
+	population.pursuit = true
+	population.crime_position = player.position
+	game.active_pursuit_escape_seconds = 15.0
+	var original: PackedVector3Array = cruiser.route
+	population._update_cruiser_routes(0.1,false)
+	_check(not bool(cruiser.get("chasing",false)) and cruiser.route==original,"cruisers remain on routine patrol below the 20-second tier")
+	game.active_pursuit_escape_seconds = 20.0
+	population._update_cruiser_routes(0.1,false)
+	_check(cruiser.chasing and cruiser.route!=original and cruiser.speed>10.0,"tier20 dispatch creates an active road pursuit")
+	var start: Vector3 = cruiser.node.position
+	var on_road := true
+	var clear := true
+	var max_step := 0.0
+	for tick in 3600:
+		var before: Vector3 = cruiser.node.position
+		population._update_cruiser_routes(1.0/60.0,false)
+		population._update_traffic(1.0/60.0,false)
+		max_step = maxf(max_step,before.distance_to(cruiser.node.position))
+		if tick%60==0:
+			var nearest: Dictionary = population._nearest_cruiser_road(cruiser.node.position)
+			if cruiser.node.position.distance_to(nearest.point)>4.5: on_road = false
+			if not world.vehicle_pose_clear(cruiser.node.position,cruiser.node.rotation.y): clear = false
+		if tick%300==0: await physics_frame
+		if cruiser.node.position.distance_to(player.position)<5.0: break
+	_check(cruiser.node.position.distance_to(player.position)<5.0 and start.distance_to(cruiser.node.position)>40.0,"the cruiser actually closes in through connected roads")
+	_check(on_road and clear and max_step<0.3,"cruiser chase stays on roads, clears static props and never teleports")
+	population.pursuit = false
+	game.end_pursuit()
+	population._update_cruiser_routes(0.1,false)
+	_check(not cruiser.chasing and cruiser.rejoining,"escaped cruiser takes a road route back to normal patrol")
+	for tick in 6000:
+		population._update_cruiser_routes(1.0/60.0,false)
+		population._update_traffic(1.0/60.0,false)
+		if tick%300==0: await physics_frame
+		if not cruiser.rejoining: break
+	_check(not cruiser.rejoining and cruiser.route==original,"the cruiser physically rejoins its original patrol loop")
+	var parked: Dictionary = {}
+	for car: Dictionary in population.vehicles:
+		if bool(car.get("police",false)) and car.parked: parked = car; break
+	_check(not parked.is_empty(),"parked marked cruisers are recognized as police officers")
+	if parked.is_empty(): return
+	var bay: Vector3 = parked.node.position
+	population.pursuit = true
+	game.active_pursuit_escape_seconds = 20.0
+	population._update_cruiser_routes(0.1,false)
+	_check(not parked.parked and parked.chasing and parked.route.size()>4,"parked police can leave their actual bay and join a tier20 response")
+	for tick in 4200:
+		population._update_cruiser_routes(1.0/60.0,false)
+		population._update_traffic(1.0/60.0,false)
+		if tick%300==0: await physics_frame
+		if parked.node.position.distance_to(bay)>35.0: break
+	_check(parked.node.position.distance_to(bay)>35.0,"parked cruiser physically traverses the parking aisle and exit")
+	_check(int(parked.get("chase_merge_index",-1))==0 and parked.speed>10.0,"after leaving its lot the cruiser uses normal chase speed and can keep replanning")
+	population.pursuit = false
+	game.end_pursuit()
+	population._update_cruiser_routes(0.1,false)
+	for tick in 9000:
+		population._update_cruiser_routes(1.0/60.0,false)
+		population._update_traffic(1.0/60.0,false)
+		if tick%300==0: await physics_frame
+		if parked.parked: break
+	_check(parked.parked and parked.route.is_empty() and parked.node.position.distance_to(bay)<1.0,"originally parked cruiser returns to its vacant bay after the chase")
+	population.pursuit = true
+	game.active_pursuit_escape_seconds = 20.0
+	population._update_cruiser_routes(0.1,false)
+	var reservations: Array[Dictionary] = []
+	for car: Dictionary in population.vehicles:
+		if car.node!=parked.node: reservations.append(car)
+	var index := 0
+	for slot: Dictionary in world.parking_slots:
+		if int(slot.lot)==int(parked.lot):
+			reservations[index].reserved_parking_id = int(slot.id)
+			index += 1
+	population.pursuit = false
+	game.end_pursuit()
+	population._update_cruiser_routes(0.1,false)
+	_check(bool(parked.get("awaiting_parking",false)),"a full home lot leaves a returning cruiser waiting safely for a free bay")
+	for car: Dictionary in reservations: car.reserved_parking_id = -1
+	population._update_cruiser_routes(2.1,false)
+	_check(not parked.awaiting_parking and parked.rejoining,"the cruiser retries and resumes its return when a parking space becomes free")

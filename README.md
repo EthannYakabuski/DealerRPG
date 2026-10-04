@@ -57,12 +57,13 @@ Milo's first follow-up arrives about ninety game minutes after saving his number
 - Proactive offers to saved contacts, occasional requests for a discount, tomorrow replies and in-person postponements.
 - Relationships affected by punctuality, price, quality, cancellation and no-shows.
 - Three suppliers with social introductions, different prices, stock quality and bust risk. Each supplier needs two game days between new orders; a postponed pickup remains the same obligation.
+- Each bundle splits into seven dime bags. Suppliers who arrive early can hand over a pickup up to fifteen minutes before the appointment, including just before the 22:00 night window.
 - A finite backpack, food, energy, skateboard, late-game firearm/ammunition and owned car.
 - Campus security and city police with a forward view cone, close-range awareness, pursuit, escape and hardcore arrest. Ordinary handoffs must be visible: patrols see within a 220-degree cone, or within six metres from any direction, and walls always block their view. Informant reports and planned stings can still dispatch police.
 - Animated pedestrians with a majority of solo walkers, spaced social groups, varied destinations and time spent at each stop, flowing road traffic, a roaming police cruiser and parked vehicles. Moving traffic can injure you and knock you off your board.
 - Live meeting countdowns, clickable directions, transaction pop-ups and original sounds for packing, sales, purchases, texts and police events.
-- Vehicle theft, recognizable stolen cars, on-foot melee and ranged combat reactions.
-- One class per day (09:00 most days, 14:00 every third day), paid campus shifts, sleep, evening parties, and incremental tuition payments. Meetings can be booked in consecutive 30-minute slots.
+- Vehicle theft, recognizable stolen cars, solid roadside props, on-foot melee and ranged combat reactions. A successful punch or kick stuns an officer for one second.
+- One class per day (09:00 most days, 14:00 every third day), paid campus shifts, sleep, evening parties, and incremental tuition payments. Client meetings can use all sixteen named locations. The scheduling menu offers clock times and exact consecutive 30-minute appointments, even after the world clock advances.
 - Morning, afternoon, evening, dusk and night lighting; warm shop and interior lights.
 - Furnished player and neighbor apartments, market, cafe, lecture hall and learning commons interiors.
 - Automatic and manual saves, resume, explicit restart, and terminal victory/loss screens.
@@ -74,6 +75,8 @@ Friends with a relationship of at least 65 occasionally invite you to a gatherin
 Rae is your starting supplier. Sable has a 50% chance of attending each party and can also be found at Freight lane between 22:00 and 02:00; introduce yourself in person to exchange numbers. Three completed Sable pickups earn a message introducing the Regent at the East trail shelter. Answer their conversation questions to keep their number. Supplier pickups use remote outskirts locations.
 
 Two consecutive completed meetings at one location attract extra attention; three bring heavier patrols. New pursuits add local officers and increase the time you must remain unseen: 10, 10, 15, 20, 25, 30 seconds, then another 10 per pursuit. Extra local patrols leave after a full game day without another bust there. The outskirts now have their own walkers and patrol routes, and some residents walk to parked cars, drive a circuit and return to a vacant space.
+
+Each new day lowers pursuit escalation by two steps: after a 30-second pursuit, the first new pursuit the next day requires 20 seconds. An ongoing pursuit retains its original requirement across midnight. Cruisers report witnessed handoffs, stolen cars and skating in the road; sidewalks, parking lots and marked crosswalks are excluded from the skating rule. At the 20-second tier, cruisers actively pursue along the roads. At 25 seconds, foot patrols can fire after aiming with a clear view; breaking sight or landing a melee hit interrupts their aim. Losing all health ends the run and opens the statistics screen.
 
 Skateboards retain normal speed on pavement but crawl on grass. NPC emotes accompany conversations, sales, missed meetings and police alerts; a casual greeting alone does not reveal whether someone will buy.
 

@@ -194,10 +194,10 @@ func _test_night_suppliers() -> void:
 	game.supplier_order(0,1)
 	supplier = game.active_meetings()[0]
 	game.player_location_id = str(supplier["location_id"])
-	game.advance_time(float(supplier["due_minute"])-12.0-game.minute)
-	_check(not game.complete_meeting(int(supplier["id"])) and game.cash == 1000.0, "early actor arrival does not permit a supplier sale before22:00")
-	game.advance_time(12.0)
-	_check(game.complete_meeting(int(supplier["id"])) and game.cash == 954.0, "night supplier transaction succeeds when the pickup window opens")
+	game.advance_time(float(supplier["due_minute"])-16.0-game.minute)
+	_check(not game.complete_meeting(int(supplier["id"])) and game.cash == 1000.0, "supplier handoff remains blocked more than fifteen minutes before its appointment")
+	game.advance_time(1.0)
+	_check(game.complete_meeting(int(supplier["id"])) and game.cash == 954.0, "present supplier can trade fifteen minutes early even before22:00 opening")
 
 func _test_old_supplier_schedule() -> void:
 	_fresh()
@@ -210,7 +210,7 @@ func _test_old_supplier_schedule() -> void:
 	old_save["world_state"]["meeting_walks"] = [{"id":supplier_id,"position":[20.0,0.2,50.0],"target":[22.0,0.2,52.0],"state":"approaching","start_minute":800.0,"due":900.0},{"id":999,"position":[21.0,0.2,50.0],"target":[22.0,0.2,52.0],"state":"approaching","start_minute":800.0,"due":950.0}]
 	_write_save(old_save)
 	_check(game.load_game(false) and game.active_meetings()[0]["due_minute"] == 1320.0, "legacy daytime supplier appointment migrates to the next legal night")
-	_check(game.cash == 1000.0 and game.inventory["flower"] == 0 and game.inventory["dime_bag"] == 5, "supplier migration preserves all cash and stock")
+	_check(game.cash == 1000.0 and game.inventory["flower"] == 0 and game.inventory["dime_bag"] == 6, "supplier migration preserves all cash and stock")
 	_check(game.world_state["meeting_walks"].size() == 1 and int(game.world_state["meeting_walks"][0]["id"]) == 999, "supplier migration removes only the rescheduled actor's stale walk")
 	game.save_game()
 	game.load_game(false)

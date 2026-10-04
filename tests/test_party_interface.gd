@@ -63,7 +63,7 @@ func _run() -> void:
 	var quantity: Node = choice.get_meta("bundle_stepper")
 	await _tap(JOY_BUTTON_DPAD_RIGHT)
 	_check(quantity.value == 2 and root.gui_get_focus_owner() == choice, "Right changes one bundle and keeps quantity focus")
-	_check(_text("12 packed bags"), "Total packed quantity updates immediately")
+	_check(_text("%d packed bags"%(2*preload("res://scripts/game_data.gd").BAGS_PER_BUNDLE)), "Total packed quantity updates immediately from the shared bundle yield")
 	game.changed.emit()
 	await _settle()
 	choice = _key(scene.ui.body, "supplier_0_quantity")
@@ -173,7 +173,12 @@ func _run() -> void:
 	await create_timer(0.9).timeout
 	_check(actor.get_child_count()==0, "Reaction expires without a persistent actor attachment")
 	actor.queue_free()
-	game.pursuit_incidents = 4
+	game.pursuit_step = 0
+	game.pursuit_decay_day = game.day_number()
+	game.pursuit_decay_pending = false
+	for incident in range(4):
+		game.end_pursuit()
+		game.register_pursuit("campus_quad")
 	scene.population.pursuit = true
 	scene.population.escape_seconds = 8.0
 	scene.ui._update_hud()

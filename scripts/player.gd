@@ -35,6 +35,9 @@ var _grounded_board := false
 var board_on_grass := false
 var impact_cooldown := 0.0
 var impact_velocity := Vector3.ZERO
+var police_hit_cooldown := 0.0
+var last_safe_vehicle_position := Vector3.INF
+var last_safe_vehicle_heading := 0.0
 
 func _ready() -> void:
 	name = "Player"
@@ -80,6 +83,7 @@ func _physics_process(delta: float) -> void:
 		return
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	impact_cooldown = maxf(0.0, impact_cooldown - delta)
+	police_hit_cooldown = maxf(0.0, police_hit_cooldown - delta)
 	if position.distance_squared_to(last_position) > 1600.0:
 		velocity = Vector3.ZERO
 		last_safe_position = position
@@ -97,9 +101,13 @@ func _physics_process(delta: float) -> void:
 	if driving != was_driving:
 		body_shape.disabled = driving
 		car_shape.disabled = not driving
+		# People cannot displace a car during the physics overlap recovery pass.
+		collision_mask = 1 | 8 if driving else 1 | 4 | 8
+		last_safe_vehicle_position = Vector3.INF
+		if driving: car_shape.rotation.y = vehicle.rotation.y
 		was_driving = driving
 	if driving:
-		car_shape.rotation.y = visual.rotation.y
+		recover_vehicle_if_blocked()
 	var input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	var direction := Vector3(input.x, 0, input.y)
 	if camera:
@@ -108,6 +116,8 @@ func _physics_process(delta: float) -> void:
 		right.y = 0
 		forward.y = 0
 		direction = (right.normalized() * input.x + forward.normalized() * input.y).limit_length()
+	if driving and direction.length_squared()>0.0064:
+		_turn_vehicle_safely(lerp_angle(car_shape.rotation.y,atan2(direction.x,direction.z),minf(1.0,delta*7.0)))
 	var speed := 5.0
 	if Game.energy <= 4.0:
 		exhausted = true
@@ -144,8 +154,10 @@ func _physics_process(delta: float) -> void:
 	else:
 		velocity.y = -0.5
 	move_and_slide()
+	if driving: recover_vehicle_if_blocked()
 	if indoors:
-		var room_center := 600.0 + clampf(roundf((position.x-600.0)/80.0),0.0,4.0)*80.0
+		var room_count: int = city_world.interior_nodes.size() if city_world else 6
+		var room_center := 600.0 + clampf(roundf((position.x-600.0)/80.0),0.0,float(room_count-1))*80.0
 		position.x = clampf(position.x,room_center-9.4,room_center+9.4)
 		position.z = clampf(position.z,-7.4,7.4)
 	else:
@@ -161,13 +173,15 @@ func _physics_process(delta: float) -> void:
 		ActorVisuals.play(visual, "crouch" if skateboarding else "idle")
 	var travel_heading := atan2(facing.x, facing.z)
 	# A sideways stance puts both feet along the deck while its nose follows travel.
-	if not driving or direction.length() > 0.08:
+	if driving:
+		visual.rotation.y = car_shape.rotation.y
+	else:
 		visual.rotation.y = lerp_angle(visual.rotation.y, travel_heading + (PI * 0.5 if skateboarding else 0.0), minf(1.0, delta * 12))
 	board.rotation.y = lerp_angle(board.rotation.y, travel_heading, minf(1.0, delta * 12))
 	_update_grounding()
 	if vehicle:
 		vehicle.global_position = global_position
-		vehicle.rotation.y = lerp_angle(vehicle.rotation.y, visual.rotation.y, delta * 7)
+		vehicle.rotation.y = car_shape.rotation.y
 		visual.visible = false
 	else:
 		visual.visible = true
@@ -238,6 +252,9 @@ func reset_travel() -> void:
 	attack_cooldown = 0.0
 	impact_cooldown = 0.0
 	impact_velocity = Vector3.ZERO
+	police_hit_cooldown = 0.0
+	last_safe_vehicle_position = Vector3.INF
+	collision_mask = 1 | 4 | 8
 	last_attack_kind = ""
 	velocity = Vector3.ZERO
 	blocked = false
@@ -272,6 +289,62 @@ func receive_vehicle_impact(car_velocity: Vector3, source: Node3D) -> bool:
 	Game.take_damage(damage)
 	Game.feedback_event.emit("impact",damage)
 	Game.notification.emit("Traffic collision! -%d health. Watch the road." % int(ceil(damage)))
+	mode_changed.emit()
+	return true
+
+func _turn_vehicle_safely(target_heading: float) -> void:
+	if not city_world: return
+	var change := angle_difference(car_shape.rotation.y,target_heading)
+	var steps := maxi(1,ceili(absf(change)/0.06))
+	var start := car_shape.rotation.y
+	for step in range(1,steps+1):
+		var angle := start+change*float(step)/float(steps)
+		if not city_world.vehicle_pose_clear(global_position,angle): break
+		car_shape.rotation.y = angle
+
+func recover_vehicle_if_blocked() -> bool:
+	if not is_instance_valid(vehicle) or not city_world: return false
+	var heading := car_shape.rotation.y if was_driving else vehicle.rotation.y
+	if city_world.vehicle_pose_clear(global_position,heading):
+		last_safe_vehicle_position = global_position
+		last_safe_vehicle_heading = heading
+		return false
+	# A valid previous pose prevents recovery from pushing the vehicle through a
+	# wall. A bounded nearby search also repairs an embedded car from an old save.
+	var safe := Vector3.INF
+	if last_safe_vehicle_position.is_finite() and global_position.distance_squared_to(last_safe_vehicle_position)<144.0 and city_world.vehicle_pose_clear(last_safe_vehicle_position,last_safe_vehicle_heading):
+		safe = last_safe_vehicle_position
+		heading = last_safe_vehicle_heading
+	else:
+		for radius in range(1,49):
+			for index in 24:
+				var angle := TAU*float(index)/24.0
+				var candidate := global_position+Vector3(cos(angle),0,sin(angle))*float(radius)*0.5
+				if absf(candidate.x)>152.0 or absf(candidate.z)>124.0: continue
+				if city_world.vehicle_pose_clear(candidate,heading):
+					safe = candidate
+					break
+			if safe.is_finite(): break
+	if not safe.is_finite(): return false
+	global_position = safe
+	car_shape.rotation.y = heading
+	visual.rotation.y = heading
+	vehicle.global_position = safe
+	vehicle.rotation.y = heading
+	velocity = Vector3.ZERO
+	impact_velocity = Vector3.ZERO
+	last_safe_vehicle_position = safe
+	last_safe_vehicle_heading = heading
+	return true
+
+func receive_police_shot(damage: float, source: Node3D) -> bool:
+	if blocked or Game.paused or Game.status!="playing" or police_hit_cooldown>0.0: return false
+	if not is_instance_valid(source) or not is_finite(damage) or damage<=0.0 or position.x>400.0: return false
+	police_hit_cooldown = 0.65
+	skateboarding = false
+	Game.take_damage(damage)
+	Game.feedback_event.emit("impact",damage)
+	Game.notification.emit("Hit by police fire! -%d health. Find cover."%int(ceil(damage)))
 	mode_changed.emit()
 	return true
 

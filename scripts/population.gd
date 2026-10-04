@@ -14,6 +14,9 @@ const GROUP_SPACING: float = 1.75
 const PEDESTRIAN_CLEARANCE: float = 1.5
 const POLICE_CLOSE_AWARENESS: float = 6.0
 const POLICE_VIEW_COSINE: float = -0.342020143 # cos(110 degrees): a 220-degree forward cone.
+const CRUISER_PURSUIT_TIER := 20.0
+const POLICE_FIREARMS_TIER := 25.0
+const POLICE_MELEE_STUN := 1.0
 var world: Node3D
 var player: StudentPlayer
 var citizens: Array[Dictionary] = []
@@ -43,6 +46,9 @@ var _last_routine_phase := ""
 var _activity_timer := 0.0
 var car_trips: RefCounted
 var _pressure_timer := 0.0
+var _cruiser_roads := AStar3D.new()
+var _cruiser_road_edges: Array[Vector2i] = []
+var _cruiser_road_keys: Dictionary = {}
 
 func setup(city: Node3D, student: StudentPlayer) -> void:
 	world = city
@@ -50,6 +56,7 @@ func setup(city: Node3D, student: StudentPlayer) -> void:
 	player.city_world = world
 	rng.seed = 87261
 	_build_navigation()
+	_build_cruiser_roads()
 	var routes: Array = world.pedestrian_routes
 	for index in range(CITIZEN_COUNT):
 		if routes.is_empty(): break
@@ -110,7 +117,7 @@ func setup(city: Node3D, student: StudentPlayer) -> void:
 		var body := _vehicle(str(spawn.get("model","sedan")))
 		body.position = spawn.position
 		body.rotation.y = float(spawn.rotation)
-		vehicles.append({"node":body,"route":PackedVector3Array(),"index":0,"speed":0.0,"parked":true,"stolen":false,"occupied":false,"wait":0.0,"stuck":0.0,"lot":int(spawn.get("lot",-1))})
+		vehicles.append({"node":body,"route":PackedVector3Array(),"index":0,"speed":0.0,"parked":true,"stolen":false,"occupied":false,"wait":0.0,"stuck":0.0,"lot":int(spawn.get("lot",-1)),"police":str(spawn.get("model",""))=="police"})
 	car_trips = Trips.new()
 	car_trips.setup(self)
 	friend = _person("character-male-d",1.8)
@@ -417,11 +424,26 @@ func _update_traffic(delta: float, indoor: bool) -> void:
 		var actor: AnimatableBody3D = car.node
 		actor.visible = not indoor
 		if car.occupied or car.parked: continue
+		if bool(car.get("awaiting_parking",false)): continue
 		var route: PackedVector3Array = car.route
 		if route.size() < 2: continue
 		var target: Vector3 = route[int(car.index)]
 		var distance := _horizontal_distance(actor.position,target)
 		if distance < 0.35:
+			if bool(car.get("chasing",false)) and int(car.index)==route.size()-1:
+				car.current_speed = 0.0
+				continue
+			if bool(car.get("rejoining",false)) and int(car.index)==route.size()-1:
+				car.route = car.patrol_route
+				car.index = int(car.get("patrol_index",0))
+				car.rejoining = false
+				car.awaiting_parking = false
+				if bool(car.get("patrol_parked",false)):
+					car.parked = true
+					car.speed = 0.0
+					car.reserved_parking_id = -1
+					actor.rotation.y = float(car.patrol_rotation)
+				continue
 			car.index = (int(car.index)+1)%route.size()
 			target = route[int(car.index)]
 			distance = _horizontal_distance(actor.position,target)
@@ -459,12 +481,41 @@ func _update_traffic(delta: float, indoor: bool) -> void:
 			if their_priority and ours>2.4: speed = minf(speed,maxf(0.0,(ours-4.5)*3.0))
 		car.stuck = float(car.stuck)+delta if speed<0.1 else 0.0
 		var advance := minf(speed*delta,distance)
+		var wanted := actor.position+direction*advance
+		if advance>0.001:
+			advance *= minf(world.vehicle_motion_fraction(actor.position,wanted),_driving_player_motion_fraction(actor.position,wanted))
+		var next_heading := lerp_angle(actor.rotation.y,_heading(direction),minf(1.0,delta*6.0))
+		if not world.vehicle_pose_clear(actor.position+direction*advance,next_heading,1.05,2.1):
+			advance = 0.0
+			if not world.vehicle_pose_clear(actor.position,next_heading,1.05,2.1): next_heading = actor.rotation.y
+		car.current_speed = advance/maxf(delta,0.001)
 		car.distance_travelled = float(car.get("distance_travelled",0.0))+advance
 		var previous_position := actor.position
 		actor.position += direction*advance
 		if not indoor and not player.vehicle and advance>0.001:
 			_apply_traffic_impact(actor,previous_position,direction*(advance/maxf(delta,0.001)))
-		actor.rotation.y = lerp_angle(actor.rotation.y,_heading(direction),minf(1.0,delta*6.0))
+		actor.rotation.y = next_heading
+
+func _driving_player_motion_fraction(from: Vector3, to: Vector3) -> float:
+	if not is_instance_valid(player.vehicle): return 1.0
+	# An AnimatableBody moved into the driven player's capsule can force physics
+	# recovery sideways into a wall. Stop the AI bumper before that overlap.
+	var motion := to-from
+	if motion.length_squared()<0.000001: return 1.0
+	var inverse := player.vehicle.global_basis.orthonormalized().inverse()
+	var heading := inverse*motion.normalized()
+	var width := 1.05+absf(heading.z)*1.05+absf(heading.x)*2.1
+	var length := 2.1+absf(heading.z)*2.1+absf(heading.x)*1.05
+	var body := AABB(Vector3(-width,-3.0,-length),Vector3(width*2.0,6.0,length*2.0))
+	var start := inverse*(from-player.global_position)
+	var finish := inverse*(to-player.global_position)
+	if body.has_point(start):
+		# Allow a car already overlapping because the student drove into it to
+		# separate naturally, but never advance deeper into the occupied vehicle.
+		return 1.0 if finish.length_squared()>start.length_squared() else 0.0
+	var hit: Variant = body.intersects_segment(start,finish)
+	if hit==null: return 1.0
+	return clampf(start.distance_to(hit)/motion.length()-0.02,0.0,1.0)
 
 func _apply_traffic_impact(car: Node3D, previous_position: Vector3, velocity: Vector3) -> void:
 	if player.vehicle or Game.status!="playing" or not player.has_method("receive_vehicle_impact"): return
@@ -487,16 +538,195 @@ func _traffic_crossing(a: Vector3, direction: Vector3, b: Vector3, other_directi
 	var between := b-a
 	return Vector2((between.x*other_direction.z-between.z*other_direction.x)/divisor,(between.x*direction.z-between.z*direction.x)/divisor)
 
+func _build_cruiser_roads() -> void:
+	# Build once from the same road geometry that is rendered. Junction splits
+	# include branch endpoints lying partway along another road segment.
+	_cruiser_roads.clear()
+	_cruiser_road_edges.clear()
+	_cruiser_road_keys.clear()
+	var segments: Array[Dictionary] = []
+	var bridges: Array[PackedVector3Array] = []
+	for road: PackedVector3Array in world.map_roads:
+		for index in road.size()-1:
+			segments.append({"a":road[index],"b":road[index+1],"cuts":[0.0,1.0]})
+	for index in segments.size():
+		var a: Dictionary = segments[index]
+		for other in range(index+1,segments.size()):
+			var b: Dictionary = segments[other]
+			var crossing := _traffic_crossing(a.a,a.b-a.a,b.a,b.b-b.a)
+			if crossing.is_finite() and crossing.x>=0.0 and crossing.x<=1.0 and crossing.y>=0.0 and crossing.y<=1.0:
+				a.cuts.append(crossing.x)
+				b.cuts.append(crossing.y)
+			for pair: Array in [[a,b],[b,a]]:
+				for endpoint: Vector3 in [pair[0].a,pair[0].b]:
+					var near := Geometry3D.get_closest_point_to_segment(endpoint,pair[1].a,pair[1].b)
+					if endpoint.distance_squared_to(near)>2.25: continue
+					pair[1].cuts.append(Vector3(pair[1].a).distance_to(near)/Vector3(pair[1].a).distance_to(pair[1].b))
+					bridges.append(PackedVector3Array([endpoint,near]))
+	for segment: Dictionary in segments:
+		segment.cuts.sort()
+		for index in segment.cuts.size()-1:
+			_cruiser_road_edge(Vector3(segment.a).lerp(segment.b,float(segment.cuts[index])),Vector3(segment.a).lerp(segment.b,float(segment.cuts[index+1])))
+	for bridge: PackedVector3Array in bridges: _cruiser_road_edge(bridge[0],bridge[1])
+
+func _cruiser_road_id(at: Vector3) -> int:
+	var key := Vector2i(roundi(at.x*100.0),roundi(at.z*100.0))
+	if _cruiser_road_keys.has(key): return int(_cruiser_road_keys[key])
+	var id := _cruiser_roads.get_available_point_id()
+	_cruiser_roads.add_point(id,Vector3(float(key.x)/100.0,0,float(key.y)/100.0))
+	_cruiser_road_keys[key] = id
+	return id
+
+func _cruiser_road_edge(a: Vector3, b: Vector3) -> void:
+	var first := _cruiser_road_id(a)
+	var last := _cruiser_road_id(b)
+	if first==last or _cruiser_roads.are_points_connected(first,last): return
+	_cruiser_roads.connect_points(first,last)
+	_cruiser_road_edges.append(Vector2i(first,last))
+
+func _nearest_cruiser_road(at: Vector3) -> Dictionary:
+	var result: Dictionary = {}
+	var best := INF
+	for edge: Vector2i in _cruiser_road_edges:
+		var near := Geometry3D.get_closest_point_to_segment(at,_cruiser_roads.get_point_position(edge.x),_cruiser_roads.get_point_position(edge.y))
+		var distance := at.distance_squared_to(near)
+		if distance<best:
+			best = distance
+			result = {"point":near,"edge":edge}
+	return result
+
+func _cruiser_route_to(from: Vector3, target: Vector3) -> PackedVector3Array:
+	var start := _nearest_cruiser_road(from)
+	var finish := _nearest_cruiser_road(target)
+	if start.is_empty() or finish.is_empty(): return PackedVector3Array()
+	var start_id := _cruiser_roads.get_available_point_id()
+	_cruiser_roads.add_point(start_id,start.point)
+	var finish_id := _cruiser_roads.get_available_point_id()
+	_cruiser_roads.add_point(finish_id,finish.point)
+	for id: int in [start.edge.x,start.edge.y]: _cruiser_roads.connect_points(start_id,id)
+	for id: int in [finish.edge.x,finish.edge.y]: _cruiser_roads.connect_points(finish_id,id)
+	if start.edge==finish.edge: _cruiser_roads.connect_points(start_id,finish_id)
+	var points := _cruiser_roads.get_point_path(start_id,finish_id)
+	_cruiser_roads.remove_point(start_id)
+	_cruiser_roads.remove_point(finish_id)
+	var centers := PackedVector3Array()
+	for point: Vector3 in points:
+		if centers.is_empty() or point.distance_squared_to(centers[-1])>0.04: centers.append(point)
+	if centers.size()<2: return PackedVector3Array()
+	var route := PackedVector3Array([from])
+	for index in centers.size():
+		var incoming := (centers[index]-centers[maxi(0,index-1)]).normalized()
+		var outgoing := (centers[mini(centers.size()-1,index+1)]-centers[index]).normalized()
+		if incoming.length_squared()<0.1: incoming = outgoing
+		if outgoing.length_squared()<0.1: outgoing = incoming
+		var tangent := (incoming+outgoing).normalized()
+		var side := Vector3(-tangent.z,0,tangent.x)
+		var offset := 1.35/maxf(0.65,side.dot(Vector3(-outgoing.z,0,outgoing.x)))
+		var lane := centers[index]+side*offset+Vector3.UP*0.16
+		if route[-1].distance_squared_to(lane)>0.16: route.append(lane)
+	return route
+
+func _update_cruiser_routes(delta: float, indoor: bool) -> void:
+	var chase := pursuit and not indoor and Game.escape_duration_seconds()>=CRUISER_PURSUIT_TIER and not _is_campus(crime_position)
+	for car: Dictionary in vehicles:
+		if not bool(car.get("police",false)) or car.occupied or car.stolen: continue
+		if chase:
+			if not bool(car.get("chasing",false)):
+				if not car.has("patrol_route"):
+					car.patrol_route = car.route.duplicate()
+					car.patrol_speed = car.speed
+					car.patrol_parked = car.parked
+					car.patrol_origin = car.node.position
+					car.patrol_rotation = car.node.rotation.y
+				car.chasing = true
+				car.rejoining = false
+				car.awaiting_parking = false
+				car.chase_replan = 0.0
+				car.chase_departure = car_trips.parking_departure(car) if car.parked or bool(car.get("patrol_parked",false)) else PackedVector3Array()
+				car.chase_merge_index = 0
+				car.parked = false
+				_emote(car.node,"alert")
+			car.chase_replan = float(car.get("chase_replan",0.0))-delta
+			if int(car.get("chase_merge_index",0))>0:
+				if int(car.index)<=int(car.chase_merge_index):
+					car.speed = 3.5
+					continue
+				car.chase_merge_index = 0
+			if float(car.chase_replan)<=0.0:
+				car.chase_replan = 1.5
+				var departure: PackedVector3Array = car.get("chase_departure",PackedVector3Array())
+				var route := _cruiser_route_to(car.node.position if departure.is_empty() else departure[-1],crime_position)
+				if not departure.is_empty():
+					car.chase_merge_index = departure.size()-1
+					departure.append_array(route.slice(1))
+					route = departure
+					car.chase_departure = PackedVector3Array()
+				if route.size()>1:
+					car.route = route
+					car.index = 1
+			car.speed = 13.5
+		elif bool(car.get("chasing",false)) or bool(car.get("awaiting_parking",false)):
+			if bool(car.get("awaiting_parking",false)):
+				car.return_retry = float(car.get("return_retry",0.0))-delta
+				if float(car.return_retry)>0.0: continue
+			car.chasing = false
+			car.speed = float(car.get("patrol_speed",7.0))
+			if bool(car.get("patrol_parked",false)):
+				var parking: Dictionary = car_trips.parking_return(car,car.patrol_origin)
+				if parking.is_empty():
+					car.speed = 0.0
+					car.awaiting_parking = true
+					car.return_retry = 2.0
+					continue
+				car.awaiting_parking = false
+				var access: PackedVector3Array = parking.path
+				var route := _cruiser_route_to(car.node.position,access[0])
+				if route.is_empty(): route = PackedVector3Array([car.node.position])
+				route.append_array(access)
+				car.route = route
+				car.index = 1
+				car.rejoining = true
+				car.patrol_rotation = float(parking.slot.rotation)
+				car.speed = 5.0
+				continue
+			var patrol: PackedVector3Array = car.patrol_route
+			var nearest := INF
+			var join := Vector3.ZERO
+			for index in patrol.size():
+				var point := Geometry3D.get_closest_point_to_segment(car.node.position,patrol[index],patrol[(index+1)%patrol.size()])
+				if car.node.position.distance_squared_to(point)<nearest:
+					nearest = car.node.position.distance_squared_to(point)
+					join = point
+					car.patrol_index = (index+1)%patrol.size()
+			var route := _cruiser_route_to(car.node.position,join)
+			if route.size()>1:
+				route.append(join)
+				car.route = route
+				car.index = 1
+				car.rejoining = true
+			else:
+				car.route = patrol
+				car.index = int(car.get("patrol_index",0))
+
 func _update_police(delta: float, indoor: bool) -> void:
 	var seen := false
 	var closest := INF
 	var player_on_campus := _is_campus(player.position)
+	var road_skating: bool = not indoor and player.skateboarding and not player.vehicle and world.is_road_skating_violation(player.global_position)
 	if not indoor and not player_on_campus and _cruiser_sees_player():
+		if road_skating and not pursuit:
+			crime_position = player.position
+			_begin_pursuit("ROAD SKATING SPOTTED — the road patrol called it in.")
+			_alert_city_officers()
 		if stolen_vehicle and player.vehicle and not pursuit:
 			crime_position = player.position
 			_begin_pursuit("STOLEN VEHICLE IDENTIFIED — a road patrol called it in.")
 			_alert_city_officers()
-		if pursuit: seen = true
+		if pursuit:
+			seen = true
+			for car: Dictionary in vehicles:
+				if _active_cruiser(car) and _police_can_see(car.node,player.global_position,28.0):
+					closest = minf(closest,maxf(0.0,_horizontal_distance(car.node.position,player.position)-1.2))
 	for officer: Dictionary in police:
 		var actor: CharacterBody3D = officer.node
 		_ground_person(actor)
@@ -508,7 +738,10 @@ func _update_police(delta: float, indoor: bool) -> void:
 			continue
 		if float(officer.stun) > 0.0:
 			officer.stun = maxf(0.0,float(officer.stun)-delta)
+			officer.aim_seconds = 0.0
+			actor.velocity = Vector3.ZERO
 			continue
+		officer.shot_cooldown = maxf(0.0,float(officer.get("shot_cooldown",0.0))-delta)
 		var distance := _horizontal_distance(actor.position,player.position)
 		var jurisdiction := bool(officer.campus) == player_on_campus
 		var can_see := not indoor and jurisdiction and _police_can_see(actor,player.global_position,28.0 if pursuit else 19.0)
@@ -533,6 +766,8 @@ func _update_police(delta: float, indoor: bool) -> void:
 			var target: Vector3 = route[int(officer.index)]
 			if _horizontal_distance(actor.position,target)<1.3: officer.index = (int(officer.index)+1)%route.size()
 			_move_person(officer,target,1.8,delta)
+		_update_police_fire(officer,delta,can_see,distance)
+	_update_cruiser_routes(delta,indoor)
 	if not pursuit: return
 	if seen:
 		escape_seconds = 0.0
@@ -546,6 +781,7 @@ func _update_police(delta: float, indoor: bool) -> void:
 		return
 	if escape_seconds >= Game.escape_duration_seconds():
 		pursuit = false
+		Game.end_pursuit()
 		arrest_seconds = 0.0
 		for officer: Dictionary in police: officer.alert = 0.0
 		Game.set_heat(maxf(0.0,Game.heat-30.0))
@@ -553,9 +789,50 @@ func _update_police(delta: float, indoor: bool) -> void:
 
 func _cruiser_sees_player() -> bool:
 	for car: Dictionary in vehicles:
-		if not bool(car.get("police",false)) or car.occupied or car.stolen: continue
-		if _police_can_see(car.node,player.global_position,22.0): return true
+		if not _active_cruiser(car): continue
+		if _police_can_see(car.node,player.global_position,28.0 if pursuit else 19.0): return true
 	return false
+
+func _active_cruiser(car: Dictionary) -> bool:
+	return bool(car.get("police",false)) and not car.occupied and not car.stolen and float(car.get("hp",100.0))>0.0 and float(car.get("stun",0.0))<=0.0
+
+func _update_police_fire(officer: Dictionary, delta: float, can_see: bool, distance: float) -> void:
+	var eligible := pursuit and can_see and float(officer.hp)>0.0 and float(officer.stun)<=0.0 and not bool(officer.get("retiring",false)) and distance>4.0 and distance<22.0 and Game.escape_duration_seconds()>=POLICE_FIREARMS_TIER
+	if not eligible:
+		officer.aim_seconds = 0.0
+		if is_instance_valid(officer.get("weapon",null)): officer.weapon.visible = false
+		return
+	if not is_instance_valid(officer.get("weapon",null)):
+		var weapon := ActorVisuals.model("Blasters","blaster-a",0.3)
+		weapon.position = Vector3(0.36,1.1,0.4)
+		var model: Node3D = officer.node.get_meta("model")
+		model.add_child(weapon)
+		officer.weapon = weapon
+		_emote(officer.node,"alert")
+	officer.weapon.visible = true
+	officer.aim_seconds = float(officer.get("aim_seconds",0.0))+delta
+	if float(officer.aim_seconds)<0.8 or float(officer.get("shot_cooldown",0.0))>0.0: return
+	# Each shot is a fresh unobstructed sight test, not damage scheduled after a
+	# wall is crossed. No firing during melee stun, retirement or loss of sight.
+	if not _line_of_sight(officer.node.global_position,player.global_position): return
+	officer.aim_seconds = 0.0
+	officer.shot_cooldown = 2.2+float(officer.node.get_instance_id()%5)*0.13
+	ActorVisuals.play(officer.node,"holding-right-shoot",false)
+	_police_shot_trace(officer.node.global_position+Vector3(0,1.25,0),player.global_position+Vector3.UP)
+	Game.feedback_event.emit("police_shot",0.0)
+	player.receive_police_shot(9.0,officer.node)
+
+func _police_shot_trace(from: Vector3, target: Vector3) -> void:
+	var line := ImmediateMesh.new()
+	line.surface_begin(Mesh.PRIMITIVE_LINES,ActorVisuals.material(Color("ffe3a0"),true))
+	line.surface_add_vertex(from)
+	line.surface_add_vertex(target)
+	line.surface_end()
+	var trace := MeshInstance3D.new()
+	trace.name = "PoliceShot"
+	trace.mesh = line
+	add_child(trace)
+	get_tree().create_timer(0.12).timeout.connect(trace.queue_free)
 
 func _police_can_see(observer: Node3D, target: Vector3, sight_range: float) -> bool:
 	var relative := target-observer.global_position
@@ -592,7 +869,10 @@ func _build_navigation() -> void:
 	navigation.cell_size = Vector2(NAV_CELL,NAV_CELL)
 	navigation.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
 	navigation.update()
-	for obstacle: Rect2 in world.obstacle_rects:
+	var walking_obstacles: Array[Rect2] = []
+	walking_obstacles.assign(world.obstacle_rects)
+	walking_obstacles.append_array(world.navigation_prop_obstacles())
+	for obstacle: Rect2 in walking_obstacles:
 		var blocked := obstacle.grow(0.7)
 		var start := Vector2i(floori(blocked.position.x/NAV_CELL),floori(blocked.position.y/NAV_CELL))
 		var finish := Vector2i(ceili(blocked.end.x/NAV_CELL),ceili(blocked.end.y/NAV_CELL))
@@ -945,7 +1225,12 @@ func toggle_vehicle() -> void:
 		Game.notification.emit("Your car. Drive carefully.")
 
 func _safe_vehicle_exit(car: Node3D) -> Vector3:
-	var options: Array[Vector3] = [car.global_basis.x*2.1,-car.global_basis.x*2.1,-car.global_basis.z*3.0,car.global_basis.z*3.0]
+	if player.vehicle==car: player.recover_vehicle_if_blocked()
+	var options: Array[Vector3] = []
+	for side: float in [2.1,-2.1,2.8,-2.8]:
+		for along: float in [0.0,-1.35,1.35]: options.append(car.global_basis.x*side+car.global_basis.z*along)
+	for along: float in [-3.0,3.0,-3.8,3.8]:
+		for side: float in [0.0,-1.0,1.0]: options.append(car.global_basis.z*along+car.global_basis.x*side)
 	for offset: Vector3 in options:
 		var target := car.global_position+offset+Vector3(0,0.3,0)
 		if not _line_of_sight(car.global_position,target): continue
@@ -999,7 +1284,7 @@ func restore_meeting_state(saved: Array) -> void:
 		record.last_minute = Game.minute
 		var start: float = float(entry.get("start_minute",record.start_minute))
 		if is_finite(start): record.start_minute = start
-		if str(entry.get("state",""))=="waiting" and Game.minute>=float(record.due)-Game.MEETING_ARRIVAL_MINUTES and _horizontal_distance(at,record.target)<2.0:
+		if str(entry.get("state",""))=="waiting" and Game.minute>=float(record.due)-float(record.arrival_minutes) and _horizontal_distance(at,record.target)<2.0:
 			record.state = "waiting"
 
 func capture_pursuit_state() -> Dictionary:
@@ -1043,7 +1328,9 @@ func attack(kind: String) -> void:
 	if not victim.is_empty():
 		if kind!="shoot": Game.report_crime(28.0)
 		victim.hp = maxf(0.0,float(victim.hp)-damage)
-		victim.stun = 0.65
+		victim.stun = POLICE_MELEE_STUN if victim.has("campus") and kind!="shoot" else 0.65
+		victim.node.velocity = Vector3.ZERO
+		if victim.has("campus"): victim.aim_seconds = 0.0
 		if victim.has("panic"): victim.panic = 8.0
 		if float(victim.hp)<=0.0: victim.node.collision_layer = 0
 		ActorVisuals.play(victim.node,"die" if float(victim.hp)<=0.0 else "emote-no",false)
@@ -1115,8 +1402,9 @@ func _sync_meetings() -> void:
 		actor.collision_layer = PERSON_LAYER if actor.visible else 0
 		var path := _walking_path(start,target)
 		var distance := _path_distance(start,path,0,target)
+		var arrival_minutes: float = Game.meeting_arrival_minutes(meeting)
 		meeting_actors[id] = actor
-		meeting_walks[id] = {"node":actor,"hp":100.0,"state":"approaching","target":target,"due":float(meeting.due_minute),"start_minute":float(meeting.due_minute)-Game.MEETING_ARRIVAL_MINUTES-distance/1.9*3.0,"last_minute":Game.minute,"nav_path":path,"nav_index":0,"nav_target":target,"nav_timer":2.0}
+		meeting_walks[id] = {"node":actor,"hp":100.0,"state":"approaching","target":target,"due":float(meeting.due_minute),"arrival_minutes":arrival_minutes,"start_minute":float(meeting.due_minute)-arrival_minutes-distance/1.9*3.0,"last_minute":Game.minute,"nav_path":path,"nav_index":0,"nav_target":target,"nav_timer":2.0}
 	for id: String in meeting_walks.keys():
 		if live.has(id): continue
 		var record: Dictionary = meeting_walks[id]
@@ -1153,10 +1441,10 @@ func _update_meeting_walks(delta: float, indoor: bool) -> void:
 			continue
 		if Game.minute<float(record.start_minute): continue
 		var remaining := _horizontal_distance(actor.position,record.target) if _line_of_sight(actor.position,record.target) else _path_distance(actor.position,record.nav_path,int(record.nav_index),record.target)
-		var seconds_left := maxf(0.1,(float(record.due)-Game.MEETING_ARRIVAL_MINUTES-Game.minute)/3.0)
+		var seconds_left := maxf(0.1,(float(record.due)-float(record.arrival_minutes)-Game.minute)/3.0)
 		var speed := clampf(remaining/seconds_left,1.2,5.8)
 		if _horizontal_distance(actor.position,record.target)<0.85:
-			if Game.minute>=float(record.due)-Game.MEETING_ARRIVAL_MINUTES:
+			if Game.minute>=float(record.due)-float(record.arrival_minutes):
 				record.state = "waiting"
 				ActorVisuals.play(actor,"idle")
 			continue
@@ -1219,7 +1507,7 @@ func _fast_forward_offscreen(record: Dictionary, minutes: float) -> void:
 		allowance -= distance
 	record.nav_path = _walking_path(record.node.position,record.target)
 	record.nav_index = 0
-	if _horizontal_distance(record.node.position,record.target)<0.85 and Game.minute>=float(record.due)-Game.MEETING_ARRIVAL_MINUTES:
+	if _horizontal_distance(record.node.position,record.target)<0.85 and Game.minute>=float(record.due)-float(record.arrival_minutes):
 		record.state = "waiting"
 
 func _remove_meeting_actor(id: String) -> void:

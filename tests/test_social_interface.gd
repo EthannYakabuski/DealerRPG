@@ -99,7 +99,7 @@ func _run() -> void:
 	await _press("ARRANGE A MEETING")
 	var time:OptionButton=_key("schedule_time")
 	var price_edit:LineEdit=_key("schedule_price")
-	_check(time.item_count==10 and "480 minutes" in time.get_item_text(9),"Client scheduling offers the full eight-hour horizon")
+	_check(time.item_count>10 and is_equal_approx(float(time.get_item_metadata(time.item_count-1)),game.minute+480.0),"Client scheduling offers exact clock choices through the full eight-hour horizon")
 	_check(price_edit.get_parent().max_value==20 and price_edit.get_parent().value==20,"Discounted reply initializes and caps the offered price")
 	price_edit.grab_focus()
 	_check(scene.ui.adjust_focused_value(-1) and price_edit.get_parent().value==19,"Controller adjustment changes a focused price without typing")
@@ -108,7 +108,7 @@ func _run() -> void:
 	await _settle()
 	_check(str(root.gui_get_focus_owner().get_meta("focus_key",""))=="schedule_price","Numeric-field focus survives rebuilding the form, including SpinBox's internal editor")
 	time=_key("schedule_time")
-	time.select(9)
+	time.select(time.item_count-1)
 	var scheduled_at:float=game.minute
 	await _press("CONFIRM MEETING")
 	var appointment:Dictionary=game.active_meetings()[0]

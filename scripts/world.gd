@@ -54,6 +54,8 @@ var _occluders: Array[Dictionary] = []
 var _fade_materials: Dictionary = {}
 var _walkable_surfaces: Array[Dictionary] = []
 var _surface_cells: Dictionary = {}
+var _vehicle_queries: Dictionary = {}
+var _navigation_prop_rects: Array[Rect2] = []
 
 func _ready() -> void:
 	_rng.seed = 26813
@@ -80,6 +82,7 @@ func _ready() -> void:
 	_connect_parking_lots()
 	_clear_public_corridors()
 	_place_trees()
+	_create_public_prop_collisions()
 	_create_markers()
 	_index_ground_primitives()
 	for cell: Vector2i in _surface_cells:
@@ -357,6 +360,56 @@ func is_paved_surface(at: Vector3) -> bool:
 		var surface: Dictionary = _walkable_surfaces[index]
 		if surface.bounds.has_point(point) and Geometry2D.is_point_in_polygon(point,surface.polygon): return bool(surface.paved)
 	return false
+
+func is_road_skating_violation(at: Vector3) -> bool:
+	# Only the carriageway counts. Parking lots, paths, sidewalks and marked
+	# crossings remain legitimate skating surfaces, even at a junction.
+	if not at.is_finite() or at.x > 400.0: return false
+	var point := Vector3(at.x,0,at.z)
+	for crossing: Dictionary in crosswalks:
+		var offset: Vector3 = point-crossing.center
+		var tangent: Vector3 = crossing.tangent
+		var across := Vector3(tangent.z,0,-tangent.x)
+		if absf(offset.dot(tangent)) <= 2.2 and absf(offset.dot(across)) <= float(crossing.width)*0.5+0.8: return false
+	for index in map_roads.size():
+		var road: PackedVector3Array = map_roads[index]
+		for segment in road.size()-1:
+			var closest := Geometry3D.get_closest_point_to_segment(point,road[segment],road[segment+1])
+			if point.distance_squared_to(closest) < pow(road_widths[index]*0.5-0.6,2): return true
+	return false
+
+func _vehicle_query(at: Vector3, heading: float, half_width: float, half_length: float) -> PhysicsShapeQueryParameters3D:
+	var key := Vector2(half_width,half_length)
+	if not _vehicle_queries.has(key):
+		var query := PhysicsShapeQueryParameters3D.new()
+		var box := BoxShape3D.new()
+		# Clear the ground/visual kerb while retaining the full horizontal car.
+		box.size = Vector3(half_width*2.0,1.1,half_length*2.0)
+		query.shape = box
+		query.collision_mask = 1
+		query.margin = 0.0
+		_vehicle_queries[key] = query
+	var query: PhysicsShapeQueryParameters3D = _vehicle_queries[key]
+	query.transform = Transform3D(Basis(Vector3.UP,heading),at+Vector3.UP*0.85)
+	query.motion = Vector3.ZERO
+	return query
+
+func vehicle_pose_clear(at: Vector3, heading: float, half_width: float = 0.95, half_length: float = 1.95) -> bool:
+	if not at.is_finite() or not is_finite(heading): return false
+	var query := _vehicle_query(at,heading,half_width,half_length)
+	return get_world_3d().direct_space_state.intersect_shape(query,1).is_empty()
+
+func vehicle_motion_fraction(from: Vector3, to: Vector3, half_width: float = 1.05, half_length: float = 2.1) -> float:
+	if not from.is_finite() or not to.is_finite(): return 0.0
+	var motion := to-from
+	motion.y = 0.0
+	if motion.length_squared()<0.000001: return 1.0
+	var query := _vehicle_query(from,atan2(motion.x,motion.z),half_width,half_length)
+	var space := get_world_3d().direct_space_state
+	if not space.intersect_shape(query,1).is_empty(): return 0.0
+	query.motion = motion
+	var fractions := space.cast_motion(query)
+	return maxf(0.0,float(fractions[0])-0.02/motion.length()) if fractions[0]<1.0 else 1.0
 
 func walkable_support_height(at: Vector3, radius: float) -> float:
 	if at.x>400.0: return -0.005
@@ -696,6 +749,69 @@ func _plant_tree(at: Vector3, height: float, variant: int) -> void:
 	_register_occluder(tree,AABB(at-Vector3(height*0.42,0,height*0.42),Vector3(height*0.84,height,height*0.84)))
 	# A small soil ring makes the lawn/tree transition deliberate.
 	_batch.cylinder(at+Vector3.UP*0.035,height*0.11,0.07,Color("716a50"))
+
+func _create_public_prop_collisions() -> void:
+	# Place collision after relocating streetscape props out of walkways. The
+	# low vertices locate the actual trunk/pole, not the overhanging foliage/lamp.
+	for entry: Dictionary in public_props:
+		var node: Node3D = entry.node
+		if not node.visible: continue
+		var slender: bool = entry.key in ["tree","Roads/light-curved","Roads/road-sign-stop","Roads/traffic-light"]
+		var limits := _prop_low_bounds(node,0.5 if slender else 1.8)
+		if limits.size == Vector3.ZERO: continue
+		var body := StaticBody3D.new()
+		body.name = "PropCollision"
+		body.collision_layer = 1
+		body.collision_mask = 0
+		var collider := CollisionShape3D.new()
+		if slender:
+			var cylinder := CylinderShape3D.new()
+			cylinder.radius = clampf(maxf(limits.size.x,limits.size.z)*0.5,0.12,0.65)
+			cylinder.height = 2.6
+			collider.shape = cylinder
+			collider.position = Vector3(limits.get_center().x,1.3,limits.get_center().z)
+		else:
+			var box := BoxShape3D.new()
+			box.size = Vector3(maxf(0.2,limits.size.x),maxf(0.4,limits.size.y),maxf(0.2,limits.size.z))
+			collider.shape = box
+			collider.position = limits.get_center()
+		body.add_child(collider)
+		node.add_child(body)
+		entry.collider = body
+		var center := Vector2(collider.global_position.x,collider.global_position.z)
+		var extent := Vector2.ZERO
+		if collider.shape is CylinderShape3D:
+			extent = Vector2.ONE*collider.shape.radius
+		else:
+			var half: Vector3 = collider.shape.size*0.5
+			var axes := collider.global_basis
+			extent = Vector2(absf(axes.x.x)*half.x+absf(axes.z.x)*half.z,absf(axes.x.z)*half.x+absf(axes.z.z)*half.z)
+		_navigation_prop_rects.append(Rect2(center-extent,extent*2.0))
+
+func navigation_prop_obstacles() -> Array[Rect2]:
+	return _navigation_prop_rects
+
+func _prop_low_bounds(node: Node3D, ceiling_height: float) -> AABB:
+	var pending: Array[Dictionary] = [{"node":node,"transform":Transform3D.IDENTITY}]
+	var result := AABB()
+	var initialized := false
+	while not pending.is_empty():
+		var current: Dictionary = pending.pop_back()
+		var part: Node3D = current.node
+		var local: Transform3D = current.transform
+		if part is MeshInstance3D and part.mesh:
+			for surface in part.mesh.get_surface_count():
+				var arrays: Array = part.mesh.surface_get_arrays(surface)
+				for vertex: Vector3 in arrays[Mesh.ARRAY_VERTEX]:
+					var point := local*vertex
+					if point.y > ceiling_height: continue
+					if not initialized:
+						result = AABB(point,Vector3.ZERO)
+						initialized = true
+					else: result = result.expand(point)
+		for child: Node in part.get_children():
+			if child is Node3D: pending.append({"node":child,"transform":local*child.transform})
+	return result
 
 func _parking(center: Vector3, size: Vector2, angle: float, parked_count: int) -> void:
 	var lot_id := parking_lots.size()

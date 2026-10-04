@@ -10,6 +10,40 @@ var completed_trips := 0
 func setup(population: Node3D) -> void:
 	city = population
 
+func parking_departure(car: Dictionary) -> PackedVector3Array:
+	var lot_id := int(car.get("lot",-1))
+	if lot_id<0 or lot_id>=city.world.parking_lots.size(): return PackedVector3Array()
+	var lot: Dictionary = city.world.parking_lots[lot_id]
+	if not lot.has("gate"): return PackedVector3Array()
+	var rotate := Basis(Vector3.UP,float(lot.angle))
+	var local: Vector3 = rotate.inverse()*(car.node.position-Vector3(lot.center))
+	if absf(local.x)>float(lot.size.x)*0.5+1.0 or absf(local.z)>float(lot.size.y)*0.5+1.0: return PackedVector3Array()
+	return PackedVector3Array([car.node.position,Vector3(lot.center)+rotate*Vector3(local.x,0.13,0),lot.gate+Vector3.UP*0.13,lot.road_point+Vector3.UP*0.16])
+
+func parking_return(car: Dictionary, preferred: Vector3) -> Dictionary:
+	var lot_id := int(car.get("lot",-1))
+	if lot_id<0 or lot_id>=city.world.parking_lots.size(): return {}
+	var selected: Dictionary = {}
+	for slot: Dictionary in city.world.parking_slots:
+		if slot.position.distance_squared_to(preferred)>0.1: continue
+		var taken := false
+		for other: Dictionary in city.vehicles:
+			if other.node!=car.node and (other.node.position.distance_squared_to(slot.position)<8.0 or int(other.get("reserved_parking_id",-1))==int(slot.id)): taken = true
+		for trip: Dictionary in trips:
+			if int(trip.destination.id)==int(slot.id): taken = true
+		if not taken: selected = slot
+	if selected.is_empty(): selected = _vacant_slot(lot_id,car.node)
+	if selected.is_empty(): return {}
+	car.reserved_parking_id = int(selected.id)
+	var lot: Dictionary = city.world.parking_lots[lot_id]
+	var rotate := Basis(Vector3.UP,float(lot.angle))
+	var local: Vector3 = rotate.inverse()*(Vector3(selected.position)-Vector3(lot.center))
+	var aisle: Vector3 = Vector3(lot.center)+rotate*Vector3(local.x,0.13,0)
+	var local_from: Vector3 = rotate.inverse()*(car.node.position-Vector3(lot.center))
+	if absf(local_from.x)<=float(lot.size.x)*0.5+1.0 and absf(local_from.z)<=float(lot.size.y)*0.5+1.0:
+		return {"slot":selected,"path":PackedVector3Array([car.node.position,Vector3(lot.center)+rotate*Vector3(local_from.x,0.13,0),aisle,selected.position])}
+	return {"slot":selected,"path":PackedVector3Array([lot.road_point+Vector3.UP*0.16,lot.gate+Vector3.UP*0.13,aisle,selected.position])}
+
 func update(delta: float) -> void:
 	for trip: Dictionary in trips.duplicate():
 		var citizen: Dictionary = city._citizens_by_id.get(trip.id,{})
@@ -98,7 +132,7 @@ func _vacant_slot(lot_id: int, own_car: Node3D) -> Dictionary:
 		for trip: Dictionary in trips:
 			if int(trip.destination.id)==int(slot.id): taken = true
 		for car: Dictionary in city.vehicles:
-			if car.node!=own_car and car.node.position.distance_squared_to(slot.position)<8.0: taken = true
+			if car.node!=own_car and (car.node.position.distance_squared_to(slot.position)<8.0 or int(car.get("reserved_parking_id",-1))==int(slot.id)): taken = true
 		if not taken: return slot
 	return {}
 

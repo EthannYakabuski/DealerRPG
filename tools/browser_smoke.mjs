@@ -45,6 +45,15 @@ class Protocol {
         else request.resolve(message.result);
       } else if (message.method) this.events.push(message);
     });
+    socket.addEventListener('close', () => {
+      for (const request of this.requests.values()) {
+        clearTimeout(request.timer);
+        // Chrome can close its debugging socket before acknowledging shutdown.
+        if (request.method === 'Browser.close') request.resolve({});
+        else request.reject(new Error(`QA browser disconnected during ${request.method}`));
+      }
+      this.requests.clear();
+    });
   }
   send(method, params = {}, sessionId) {
     const id = ++this.nextId;
@@ -53,7 +62,7 @@ class Protocol {
         this.requests.delete(id);
         reject(new Error(`Browser command timed out: ${method}`));
       }, 20000);
-      this.requests.set(id, { resolve, reject, timer });
+      this.requests.set(id, { resolve, reject, timer, method });
       this.socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
     });
   }

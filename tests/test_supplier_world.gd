@@ -143,6 +143,7 @@ func _run() -> void:
 		scene.party_guests._physics_process(1.0/30.0)
 		if tick % 10 == 0: await physics_frame
 	_check(scene.party_guests.guests.values().all(func(guest: Dictionary): return guest.state == "leaving"), "Guests can leave the neighbor room without furniture trapping them")
+	await _test_early_pickup()
 	scene._release_audio(scene)
 	await create_timer(0.15).timeout
 	scene.queue_free()
@@ -150,3 +151,39 @@ func _run() -> void:
 	DirAccess.remove_absolute(game.save_path)
 	print("SUPPLIER WORLD TESTS: %d checks, %d failures" % [checks,failures])
 	quit(1 if failures else 0)
+
+func _test_early_pickup() -> void:
+	scene.start_game(false)
+	scene.ui.close_page()
+	game.split_flower()
+	game.tutorial_sell()
+	game.add_tutorial_contact()
+	game.cash = 500.0
+	_check(game.supplier_order(0,1), "Rae offers an initial nighttime pickup")
+	var pickup: Dictionary = game.active_meetings()[0]
+	game.minute = float(pickup.due_minute)-15.0
+	var at: Vector3 = scene.world.get_landmark(str(pickup.location_id))
+	scene.player.position = at+Vector3(1,0.2,1)
+	scene.camera.position = scene.player.position+Vector3(24,38,28)
+	scene.camera.look_at(scene.player.position)
+	scene._update_location()
+	scene.population._sync_meetings()
+	var id := str(int(pickup.id))
+	_check(scene.population.meeting_walks.has(id), "Early supplier has a real walking body")
+	if not scene.population.meeting_walks.has(id): return
+	_check(not scene.complete_in_person(int(pickup.id)), "Early allowance never permits a handoff before the supplier arrives")
+	for tick in 5000:
+		scene.population._update_meeting_walks(1.0/30.0,false)
+		if scene.population.meeting_walks[id].state=="waiting": break
+		if tick%10==0: await physics_frame
+	_check(scene.population.meeting_walks[id].state=="waiting", "Supplier can finish walking in fifteen minutes before the appointment")
+	var actor: Node3D = scene.population.meeting_actors[id]
+	scene.player.position = actor.position+Vector3(1.0,0,0)
+	scene._update_location()
+	scene.interact()
+	await _settle()
+	_check(scene.ui.page=="postpone", "World interaction opens the supplier handoff early instead of Agenda")
+	var before: int = int(game.inventory.get("flower",0))
+	_check(scene.complete_in_person(int(pickup.id)), "In-person supplier handoff succeeds at21:45 for a22:00 booking")
+	_check(int(game.inventory.get("flower",0))==before+1, "Early pickup delivers exactly the purchased bundle")
+	scene.ui.close_page()

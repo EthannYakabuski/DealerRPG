@@ -380,7 +380,7 @@ func _interaction_text() -> String:
 	if not connection.is_empty(): return "E  Talk to %s" % connection.name
 	for meeting in Game.active_meetings():
 		if meeting.status=="scheduled" and closest_location==meeting.location_id:
-			if Game.minute>=float(meeting.due_minute)-Game.MEETING_ARRIVAL_MINUTES and population.meeting_walks.get(str(int(meeting.id)),{}).get("state","approaching")=="approaching":
+			if Game.minute>=float(meeting.due_minute)-Game.meeting_arrival_minutes(meeting) and population.meeting_walks.get(str(int(meeting.id)),{}).get("state","approaching")=="approaching":
 				return "%s is on the way  •  %s" % [meeting.contact_name,Game.format_minute(meeting.due_minute)]
 			return "E  Meet %s  •  %s" % [meeting.contact_name,Game.format_minute(meeting.due_minute)]
 	var citizen := _conversation_target()
@@ -422,7 +422,7 @@ func interact() -> void:
 		return
 	for meeting in Game.active_meetings():
 		if meeting.status=="scheduled" and closest_location==meeting.location_id:
-			if Game.minute<float(meeting.due_minute)-Game.MEETING_ARRIVAL_MINUTES:
+			if Game.minute<float(meeting.due_minute)-Game.meeting_arrival_minutes(meeting):
 				Game.notification.emit("You're early. Wait here from your agenda.")
 				ui.show_page("agenda")
 				return

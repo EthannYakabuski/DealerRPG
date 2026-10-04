@@ -1,5 +1,17 @@
 # Living-city iteration checkpoint — 2026-10-03
 
+## Ready to publish: pickup scheduling, vehicles and pursuit escalation (A–L)
+
+All requested game changes are implemented and reviewed. Supplier pickups allow 15 minutes early with the actor present; all sixteen client locations work; absolute half-hour slots and exact adjacent appointments fix clock drift. Bundles contain seven bags. Solid props block traffic, driven cars ignore pedestrian displacement, rotation respects walls, and legacy embedded cars recover a safe pose before exit.
+
+Cruisers use the existing 220-degree / 6 m visibility and wall occlusion, report road skating outside campus, and pursue on the road network at the 20-second tier. Sidewalks, parking lots and marked crossings are exempt. Foot officers aim and shoot at 25 seconds; successful melee stuns them for one second. Daily escalation drops two steps: a final 30-second chase becomes the next day's first 20-second chase. Ongoing pursuits keep their requirement across midnight and save/continue. Fatal damage opens statistics and allows a fresh story. An incidental sixth-interior movement clamp was also corrected.
+
+All source is frozen. Independent state, UI and vehicle/world integration reviews are complete. The full local build passed 1,198 counted checks plus world geometry/cutaway validation with clean logs and a 40.5 MB export. Count only logs corresponding to current tests/test_*.gd plus smoke_test.log; stale agent logs must not be included. The earned campaign wins on day 8 after 67 sales and seven pickups with the full supplier ladder and no missed classes. Native 1280/960 UI and aim/fire/stun captures were reviewed.
+
+Local exported-browser checks passed controller story/backpack/seven-bag packing, the opening sale, saving Milo, all location options, fixed times and booking East trail shelter at 14:00. Every pursuit-local-* report has zero console errors, exceptions and network failures. The unpaused campus sample was 32.2 FPS, p95 frame 34.3 ms, GT 1030/WebGL 2 at 1280×800. QA Chrome and temporary preview PID 91068 / port 8061 were closed. Leave the preexisting port 8060 server and user's Godot editor alone.
+
+Remaining: commit/push the reviewed source, verify exact-SHA CI/Pages with assess_game_workflow, run a fresh public-browser smoke check, then record the release. Prior live game release 5ca374d; prior main documentation 39ce20a. Original untracked Assets/MoreNature, Nature, UI_Dialogs, UI_emotes, UI_input and skybox packs must stay untouched. No reset credit was used. Source ownership: customer_pacing state/data; city_motion population/car trips; hud_audio interface; root world/player/main/integration/release. Completed agents are frozen; assess_game_workflow is waiting for the release SHA.
+
 ## Complete: supplier discovery and daily life (A–J)
 
 Current user scope: fix stuck west officer and stray parking-lot sidewalk; widen police view to 220 degrees and close awareness to 6 m; suppliers have two-day contact cooldowns and social unlocks (tier 1 immediately, tier 2 parties/late outskirts, tier 3 after three tier-2 deals and a conversation); 30-minute meeting slots; mixed morning/afternoon classes, one/day; rare NPC-hosted parties; remote supplier locations; purposeful pedestrians with more solo walkers.

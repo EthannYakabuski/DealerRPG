@@ -18,6 +18,7 @@ var title_screen: Control
 var body: VBoxContainer
 var page := ""
 var selected_message: Dictionary = {}
+var schedule_draft: Dictionary = {}
 var conversation: Dictionary = {}
 var supplier_conversation: Dictionary = {}
 var postpone_meeting_id := -1
@@ -43,7 +44,7 @@ var sound_enabled := true
 var meeting_card: Button
 var meeting_location := ""
 var money_feedback: Array[Control] = []
-const EVENT_SOUNDS: Array[String] = ["pack", "purchase", "sale", "text", "caught", "detected", "consume", "tuition", "class", "party", "impact"]
+const EVENT_SOUNDS: Array[String] = ["pack", "purchase", "sale", "text", "caught", "detected", "consume", "tuition", "class", "party", "impact", "police_shot"]
 var tips := ["WASD move  ·  SHIFT run  ·  SPACE skateboard", "TAB phone  ·  G agenda  ·  B backpack  ·  M map", "E interact / talk / rearrange a meeting in person", "V vehicle  ·  J punch  ·  K kick  ·  L shoot"]
 
 func _ready() -> void:
@@ -386,7 +387,8 @@ func _update_hud() -> void:
 		labels.route.text=""
 	if game_root.population.pursuit:
 		var required:float=Game.escape_duration_seconds()
-		labels.objective.text="Patrols are pursuing you. Break their line of sight.\nEscape: %ds / %ds clear"%[mini(int(game_root.population.escape_seconds),int(required)),int(required)]
+		var response:String="ARMED RESPONSE" if required>=25.0 else ("HEIGHTENED RESPONSE" if required>=20.0 else "FOOT PATROLS")
+		labels.objective.text="%s  /  Break their line of sight.\nEscape: %ds / %ds clear"%[response,mini(int(game_root.population.escape_seconds),int(required)),int(required)]
 	_update_meeting_card()
 
 func _pending_phone_count() -> int:
@@ -814,6 +816,8 @@ func _postpone_page() -> void:
 	var card:=_card()
 	var supplier:bool=appointment.type=="supplier"
 	_paragraph("%s  ·  %s\n%d %s  /  $%s total"%[_when(float(appointment.due_minute)),Data.location_name(str(appointment.location_id)),int(appointment.quantity),"bundles" if supplier else "bags",_money(float(appointment.cost) if supplier else float(appointment.price)*int(appointment.quantity))],card,CREAM)
+	if supplier and Game.minute<float(appointment.due_minute):
+		_paragraph("Your supplier arrived early. You can complete the pickup now, up to 15 minutes before the booked time.",card,LIME)
 	var patrols:int=game_root.population.police_presence_count(game_root.player.position)
 	if patrols>0:
 		_paragraph("You can see %d %s nearby. You can ask for more time if this feels exposed."%[patrols,"patrol" if patrols==1 else "patrols"],card,AMBER)
@@ -927,38 +931,62 @@ func _introduction_card(introduction:Dictionary) -> void:
 
 func _schedule_page() -> void:
 	_heading("Meet "+str(selected_message.get("contact_name","a contact")),"Arrive on time for full trust. Contacts aim to be there about 12 minutes early.")
+	if int(schedule_draft.get("message_id",-1))!=int(selected_message.get("id",-2)):
+		schedule_draft={"message_id":int(selected_message.get("id",-2))}
 	var card:=_card()
 	card.add_child(_label("MEETING PLACE",12,LIME))
 	var location:=OptionButton.new()
 	location.set_meta("focus_key","schedule_location")
 	location.custom_minimum_size.y=44
+	location.fit_to_longest_item=false
+	location.get_popup().max_size=Vector2i(0,360)
 	var locations:Array=Game.available_locations()
 	for item in locations:
-		location.add_item(item.name)
+		location.add_item(str(item.name))
+		var index:int=location.item_count-1
+		location.set_item_metadata(index,str(item.id))
+		if str(item.id)==str(schedule_draft.get("location_id","")): location.select(index)
+	location.item_selected.connect(func(index:int):schedule_draft.location_id=str(location.get_item_metadata(index)))
 	card.add_child(location)
-	card.add_child(_label("TIME FROM NOW",12,LIME))
+	card.add_child(_label("APPOINTMENT TIME",12,LIME))
 	var time:=OptionButton.new()
 	time.set_meta("focus_key","schedule_time")
 	time.custom_minimum_size.y=44
-	var delays:=[30,60,90,120,180,240,300,360,420,480]
-	for delay in delays:
-		time.add_item("%s  ·  in %d minutes"%[_when(Game.minute+delay),delay])
-	time.select(2)
+	time.fit_to_longest_item=false
+	time.get_popup().max_size=Vector2i(0,360)
+	var slots:Array=Game.available_meeting_slots(str(selected_message.get("contact_id","")))
+	var preferred:float=float(schedule_draft.get("due_minute",Game.minute+90.0))
+	var closest:float=INF
+	for slot:Dictionary in slots:
+		time.add_item(str(slot.label))
+		var index:int=time.item_count-1
+		time.set_item_metadata(index,float(slot.due_minute))
+		if absf(float(slot.due_minute)-preferred)<closest:
+			closest=absf(float(slot.due_minute)-preferred)
+			time.select(index)
+	time.item_selected.connect(func(index:int):schedule_draft.due_minute=float(time.get_item_metadata(index)))
 	card.add_child(time)
+	_paragraph("Choose a fixed time in the next eight hours. Conflicting commitments are hidden; slots 30 minutes after another meeting are labelled.",card)
+	if slots.is_empty(): _paragraph("No free meeting times in the next eight hours. Check your agenda, or ask them to text tomorrow.",card,AMBER)
 	card.add_child(_label("PRICE PER BAG  /  FAIR PRICES BUILD TRUST",12,LIME))
 	var price:=SpinBox.new()
 	price.min_value=12
 	price.max_value=float(selected_message.get("max_price",40))
-	price.value=minf(price.max_value,float(selected_message.get("suggested_price",22)))
+	price.value=minf(price.max_value,float(schedule_draft.get("price",selected_message.get("suggested_price",22))))
+	price.value_changed.connect(func(value:float):schedule_draft.price=value)
 	price.get_line_edit().set_meta("focus_key","schedule_price")
 	price.prefix="$"
 	price.step=1
 	card.add_child(price)
 	_paragraph("Quantity requested: %d. Available in backpack: %d. Quality: %d%%."%[int(selected_message.get("quantity",1)),Game.inventory.dime_bag,int(Game.dime_quality*100)],card)
-	_button("CONFIRM MEETING",func():
-		if Game.schedule_meeting(int(selected_message.id),locations[location.selected].id,delays[time.selected],price.value):
-			game_root.navigate(locations[location.selected].id)
-			show_page("agenda"),card,true)
+	var confirm:=_button("CONFIRM MEETING",func():
+		if time.selected<0 or location.selected<0: return
+		var location_id:String=str(location.get_item_metadata(location.selected))
+		if Game.schedule_meeting_at(int(selected_message.id),location_id,float(time.get_item_metadata(time.selected)),price.value):
+			schedule_draft.clear()
+			game_root.navigate(location_id)
+			show_page("agenda"),card,true,"schedule_confirm")
+	confirm.disabled=slots.is_empty() or locations.is_empty()
 	_button("Back to conversations",func():show_page("messages"))
 
 func _contacts_page() -> void:
@@ -1058,7 +1086,7 @@ func _agenda_page() -> void:
 		_button("GET DIRECTIONS",func():game_root.navigate(loc);close_page(),row,true)
 		_button("Cancel",func():Game.cancel_meeting(id),row)
 		if game_root.closest_location==loc:
-			var arrival:float=due-Game.MEETING_ARRIVAL_MINUTES
+			var arrival:float=due-Game.meeting_arrival_minutes(meeting)
 			var walk_in:float=due-30.0
 			if Game.minute<walk_in:
 				_paragraph("Skip ahead, then watch your contact walk over. They aim to arrive around %s."%Game.format_minute(arrival),card)
@@ -1071,7 +1099,7 @@ func _agenda_page() -> void:
 		_paragraph("No meetings scheduled. Check your messages or arrange a supplier pickup.")
 
 func _suppliers_page() -> void:
-	_heading("The next connection","Pickups run nightly, 22:00–02:00. Arrange a slot, bring the cash, and meet in person.")
+	_heading("The next connection","Pickup times: 22:00–02:00. Suppliers aim to arrive 15 minutes early; once you meet, you can collect right away.")
 	var catalog:Array=Game.supplier_catalog()
 	var any_available:bool=false
 	var next_pickup:float=INF
@@ -1096,7 +1124,7 @@ func _suppliers_page() -> void:
 			_paragraph(details,card,AMBER)
 		elif int(supplier.tier)==1 and int(supplier.successful_meetings)<3:
 			_paragraph("%d / 3 completed pickups toward a personal introduction."%int(supplier.successful_meetings),card,MUTED)
-		_paragraph("$%d / bundle  ·  %d%% quality  ·  %d%% bust risk\nOne bundle packs into six bags."%[supplier.bundle_price,int(supplier.quality*100),int(supplier.risk*100)],card,CREAM)
+		_paragraph("$%d / bundle  ·  %d%% quality  ·  %d%% bust risk\nOne bundle packs into %d bags."%[supplier.bundle_price,int(supplier.quality*100),int(supplier.risk*100),Data.BAGS_PER_BUNDLE],card,CREAM)
 		var tier:int=supplier.tier
 		var can_order:bool=bool(supplier.can_order)
 		if not can_order:
@@ -1112,10 +1140,10 @@ func _suppliers_page() -> void:
 		card.add_child(quantity)
 		quantity.setup(int(supplier_quantities.get(tier,1)),int(supplier.max_bundles),can_order,"supplier_%d_quantity"%tier)
 		var price:float=float(supplier.bundle_price)
-		var total:=_paragraph("$%s total  ·  %d packed bags"%[_money(price*quantity.value),quantity.value*6],card,CREAM)
+		var total:=_paragraph("$%s total  ·  %d packed bags"%[_money(price*quantity.value),quantity.value*Data.BAGS_PER_BUNDLE],card,CREAM)
 		quantity.value_changed.connect(func(value:int):
 			supplier_quantities[tier]=value
-			total.text="$%s total  ·  %d packed bags"%[_money(price*value),value*6])
+			total.text="$%s total  ·  %d packed bags"%[_money(price*value),value*Data.BAGS_PER_BUNDLE])
 		_paragraph("Left / Right: quantity     Down: arrange pickup",card)
 		var b:=_button("ARRANGE PICKUP",func():
 			if Game.supplier_order(tier,int(quantity.value)):
@@ -1149,7 +1177,7 @@ func _backpack_page() -> void:
 		_paragraph(data.description,card)
 		var id:String=item
 		match item:
-			"flower":_button("SPLIT INTO SIX DIME BAGS",func():Game.split_flower(),card,true)
+			"flower":_button("SPLIT INTO %d DIME BAGS"%Data.BAGS_PER_BUNDLE,func():Game.split_flower(),card,true)
 			"sandwich","energy_drink":_button("CONSUME",func():Game.consume_item(id),card,true)
 			"skateboard":_button("EQUIP / STOW",func():close_page();game_root.player.toggle_skateboard(),card)
 			"dime_bag":_paragraph("Quality: %d%%. Hand off at your scheduled meeting with %s."%[int(Game.dime_quality*100),"A" if controller_active else "E"],card,AMBER)
@@ -1283,9 +1311,10 @@ func _help_page() -> void:
 	_paragraph("CONTROLLER: Left stick move; A interact / confirm; B close; X skateboard; Y vehicle; LT run; RT punch; LB phone; RB backpack; Select map; Start pause. D-pad up agenda, right contacts, left kick, down shoot. In menus, D-pad or stick selects; A confirms; left/right adjusts a focused price or quantity.")
 	_paragraph("CONNECTIONS: Talk to people in the city, check in with saved contacts, and decide which introductions to trust. Questions and what you know about a friend can help you judge a new number. You can ask new requests to text tomorrow. At an in-person meetup, E opens the choice to complete the handoff or discuss postponing.")
 	_paragraph("Mouse wheel changes camera distance. Click map landmarks for directions. Menus pause the clock. Close a menu with its Close button, Escape, or the same shortcut.")
-	_paragraph("MEETINGS: Pack stock in your backpack, answer a text, choose a place/time/price, follow the map, and press E to hand off. If early, Agenda can skip ahead to 30 minutes before the meeting. Close your phone and watch your contact walk over; they aim to arrive 12 minutes early. The clock pauses in menus.")
+	_paragraph("MEETINGS: Pack stock in your backpack, answer a text, choose a place/time/price, follow the map, and press E to hand off. Fixed appointment times allow consecutive meetings 30 minutes apart. If early, Agenda can skip ahead to 30 minutes before the meeting. Close your phone and watch your contact walk over. Clients aim to arrive 12 minutes early; suppliers arrive 15 minutes early and can hand over stock then. The clock pauses in menus.")
 	_paragraph("SURVIVAL: Eat sandwiches, attend your daily class at the time shown in Agenda, and sleep at home. Some classes are in the afternoon. Three missed classes means eviction. Campus shifts can help recover seed money.")
 	_paragraph("POLICE: Visible crimes and identified stolen cars trigger pursuit. Break line of sight for %d seconds to escape at your current notoriety. Repeated incidents make escapes longer and draw more patrol attention to that location. A patrol close enough for 2.3 seconds arrests you and ends the run."%int(Game.escape_duration_seconds()))
+	_paragraph("RESPONSE: Outside campus, pursuit cruisers join once your escape requirement reaches 20 seconds. At 25 seconds, armed officers can fire. Notoriety drops by two steps each new day; an active pursuit keeps its current response until it ends.")
 	_paragraph("PROGRESSION: On-time sales and good value grow relationships. Meet Sable at a party or after hours; reliable pickups earn a personal introduction to the next supplier. Each supplier needs two days between new orders. Reputation helps you buy a car. Pay tuition from the phone to win.")
 	if game_root.closest_location in ["campus_quad","classroom"]:
 		_button("WORK CAMPUS SHIFT  /  $35 · 2 HOURS",func():Game.work_shift();close_page())

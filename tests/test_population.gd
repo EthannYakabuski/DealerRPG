@@ -48,6 +48,7 @@ func _run() -> void:
 	await _test_corner_navigation()
 	await _test_vehicles()
 	await _test_traffic_impacts()
+	await _test_driven_car_clearance()
 	await _test_civilian_reports()
 	await _test_meetings()
 	await _test_party_meeting_identity()
@@ -673,6 +674,24 @@ func _test_traffic_impacts() -> void:
 	player.reset_travel()
 	await physics_frame
 
+func _test_driven_car_clearance() -> void:
+	_reset_crime()
+	player.reset_travel()
+	var car: Dictionary = population.vehicles[0]
+	var previous: Vector3 = car.node.position
+	car.node.position = Vector3(0,0.2,48)
+	car.node.rotation.y = 0.0
+	player.position = car.node.position
+	player.vehicle = car.node
+	var fraction: float = population._driving_player_motion_fraction(Vector3(0,0.2,40),Vector3(0,0.2,48))
+	_check(fraction>0.0 and fraction<0.5,"an approaching AI bumper stops before overlapping the student's occupied car")
+	_check(population._driving_player_motion_fraction(Vector3(4,0.2,40),Vector3(4,0.2,48))==1.0,"adjacent traffic has enough room to pass the student's occupied car")
+	_check(population._driving_player_motion_fraction(Vector3(0,0.2,45),Vector3(0,0.2,44))==1.0,"an already-overlapping AI car may separate without a permanent artificial lock")
+	player.vehicle = null
+	car.node.position = previous
+	player.reset_travel()
+	await physics_frame
+
 func _test_civilian_reports() -> void:
 	_reset_crime()
 	population.reset_population()
@@ -687,6 +706,7 @@ func _test_civilian_reports() -> void:
 	citizen.node.position = Vector3(0,0.2,48)
 	player.position = Vector3(2,0.2,48)
 	await physics_frame
+
 	_check(population.nearest_conversational_npc().id==identity and population.begin_conversation(identity),"a visible pedestrian in reach can become the named interlocutor")
 	var held_at: Vector3 = citizen.node.position
 	for tick in 90: population._update_citizen(citizen,1.0/60.0,false)
