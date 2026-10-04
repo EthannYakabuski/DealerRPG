@@ -1,6 +1,6 @@
 # Living-city iteration checkpoint — 2026-10-03
 
-## Ready to publish: pickup scheduling, vehicles and pursuit escalation (A–L)
+## Complete: pickup scheduling, vehicles and pursuit escalation (A–L)
 
 All requested game changes are implemented and reviewed. Supplier pickups allow 15 minutes early with the actor present; all sixteen client locations work; absolute half-hour slots and exact adjacent appointments fix clock drift. Bundles contain seven bags. Solid props block traffic, driven cars ignore pedestrian displacement, rotation respects walls, and legacy embedded cars recover a safe pose before exit.
 
@@ -10,7 +10,9 @@ All source is frozen. Independent state, UI and vehicle/world integration review
 
 Local exported-browser checks passed controller story/backpack/seven-bag packing, the opening sale, saving Milo, all location options, fixed times and booking East trail shelter at 14:00. Every pursuit-local-* report has zero console errors, exceptions and network failures. The unpaused campus sample was 32.2 FPS, p95 frame 34.3 ms, GT 1030/WebGL 2 at 1280×800. QA Chrome and temporary preview PID 91068 / port 8061 were closed. Leave the preexisting port 8060 server and user's Godot editor alone.
 
-Remaining: commit/push the reviewed source, verify exact-SHA CI/Pages with assess_game_workflow, run a fresh public-browser smoke check, then record the release. Prior live game release 5ca374d; prior main documentation 39ce20a. Original untracked Assets/MoreNature, Nature, UI_Dialogs, UI_emotes, UI_input and skybox packs must stay untouched. No reset credit was used. Source ownership: customer_pacing state/data; city_motion population/car trips; hud_audio interface; root world/player/main/integration/release. Completed agents are frozen; assess_game_workflow is waiting for the release SHA.
+Game release `f2e4d561803b9082a126ccf2505ba0adff32b432` is deployed on main. The exact-SHA [CI/Pages run](https://github.com/EthannYakabuski/DealerRPG/actions/runs/37175142853) independently passed all 1,198 checks, world audits and the 40.5 MB export. [Public game](https://ethannyakabuski.github.io/DealerRPG/). Prior game release was 5ca374d. Original untracked Assets/MoreNature, Nature, UI_Dialogs, UI_emotes, UI_input and skybox packs remain untouched. No reset credit was used. Source ownership: customer_pacing state/data; city_motion population/car trips; hud_audio interface; root world/player/main/integration/release. assess_game_workflow independently verified exact-SHA CI and deployment.
+
+A fresh isolated public-browser session verified startup, controller tutorial/backpack/seven-bag packing, the opening sale and saving Milo, skateboard/analog movement, every selectable location, fixed time choices and a 14:30 booking at Deerfield neighbors with the live agenda card. All pursuit-public-* reports recorded zero console errors, exceptions and network failures. The QA browser was closed. No required work remains; this final checkpoint is documentation only, and the tested game release remains the SHA above.
 
 ## Complete: supplier discovery and daily life (A–J)
 
