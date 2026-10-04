@@ -241,7 +241,7 @@ func _test_feedback_events() -> void:
 	game.supplier_order(0, 1)
 	var supplier: Dictionary = _meeting_of_type("supplier")
 	game.advance_time(float(supplier["due_minute"]) - game.minute)
-	game.player_location_id = "car_park"
+	game.player_location_id = str(supplier["location_id"])
 	game.complete_meeting(int(supplier["id"]))
 	_check(_feedback_count("purchase", -46.0) == 1, "supplier payment emits purchase feedback only on physical pickup")
 	game.pay_tuition(10.0)
@@ -288,14 +288,14 @@ func _test_suppliers_inventory() -> void:
 	_tutorial()
 	_check(not game.supplier_order(0, 1), "supplier rejects unaffordable orders")
 	game.cash = 1000.0
-	_check(not game.supplier_order(2, 1), "supplier tiers require reputation")
+	_check(not game.supplier_order(2, 1), "higher suppliers require a physical introduction")
 	_check(not game.supplier_order(0, 20), "supplier bundle limit enforced")
 	var old_cash: float = game.cash
 	_check(game.supplier_order(0, 2), "supplier order creates a physical meeting")
 	_check(game.inventory["flower"] == 0 and game.cash == old_cash, "supplier stock and payment wait for handoff")
 	_check(not game.supplier_order(0, 1), "duplicate outstanding supplier order rejected")
 	var supplier: Dictionary = game.active_meetings()[0]
-	game.player_location_id = "car_park"
+	game.player_location_id = str(supplier["location_id"])
 	game.advance_time(float(supplier["due_minute"]) - game.minute)
 	_check(game.complete_meeting(int(supplier["id"])), "supplier handoff succeeds")
 	_check(game.inventory["flower"] == 2 and game.cash == old_cash - 92.0, "supplier charges correct price and delivers bundles")
@@ -333,6 +333,8 @@ func _test_calendar_survival() -> void:
 	_check(game.attend_class(), "class entry opens at 08:40")
 	_check(game.time_text() == "11:00" and game.classes_attended == 2 and game.missed_classes == 0, "class skip resolves attendance and time")
 	game.advance_time(1440.0)
+	_check(game.missed_classes == 0, "afternoon class remains available after the morning deadline on day three")
+	game.advance_time(float(game.class_schedule(3)["latest_arrival_minute"]) - game.minute + 1.0)
 	_check(game.missed_classes == 1, "missing day-three class adds one warning")
 	game.advance_time(1440.0)
 	_check(game.missed_classes == 2 and game.status == "playing", "two misses remain survivable")
@@ -477,13 +479,24 @@ func _test_campaign() -> void:
 			game.player_location_id = "market"
 			if int(game.inventory["sandwich"]) == 0: game.buy_item("sandwich", 1)
 			game.consume_item("sandwich")
+		if not bool(game.supplier_progress[1]["unlocked"]) and game.cash >= 46.0:
+			_advance_campaign_to(game.next_supplier_minute())
+			game.player_location_id = "service_lane"
+			game.supplier_encounter_action("supplier_1", "introduce")
+		if bool(game.supplier_progress[2]["referral_received"]) and not bool(game.supplier_progress[2]["unlocked"]):
+			_advance_campaign_to(game.next_supplier_minute())
+			game.player_location_id = "east_trail"
+			game.supplier_encounter_action("supplier_2", "sable")
+			game.supplier_encounter_action("supplier_2", "three")
 		if int(game.inventory["dime_bag"]) < 6:
 			if int(game.inventory["flower"]) > 0:
 				game.split_flower()
 			elif game.cash >= 46.0:
-				var tier: int = 2 if game.reputation >= 22 else (1 if game.reputation >= 8 else 0)
-				var bundles: int = mini(4, int(game.cash / float(Data.SUPPLIERS[tier]["bundle_price"])))
-				if game.supplier_order(tier, bundles):
+				var tier: int = -1
+				for candidate: Dictionary in game.supplier_catalog():
+					if candidate["can_order"]: tier = int(candidate["tier"])
+				var bundles: int = mini(4, int(game.cash / float(Data.SUPPLIERS[maxi(0, tier)]["bundle_price"])))
+				if tier >= 0 and game.supplier_order(tier, bundles):
 					var supplier: Dictionary = _meeting_of_type("supplier")
 					_advance_campaign_to(float(supplier["due_minute"]))
 					game.player_location_id = str(supplier["location_id"])
@@ -509,6 +522,7 @@ func _test_campaign() -> void:
 	_check(game.missed_classes == 0, "slower customer demand still permits daily class attendance throughout the earned campaign")
 	_check(game.cash >= game.tuition_remaining, "economy can earn full tuition from genuine starting resources")
 	_check(game.reputation >= 22 and game.contacts.size() >= 5 and supplier_transactions > 3, "campaign reaches supplier ladder and word-of-mouth growth")
+	_check(game.supplier_progress[2]["unlocked"], "earned campaign completes three Sable pickups and Regent introduction")
 	_check(game.pay_tuition() and game.status == "won", "earned campaign finishes with tuition victory")
 	print("CAMPAIGN: %d iterations, %d sales, %d supplier meets, day %d, rep %d, %d contacts" % [iterations, game.total_sales, supplier_transactions, game.day_number(), game.reputation, game.contacts.size()])
 

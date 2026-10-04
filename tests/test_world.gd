@@ -30,8 +30,23 @@ func _run() -> void:
 					failures.append("Entrance %s approach crosses another wall"%id)
 		if world.walkable_surface_height(entry.marker)<0.04:
 			failures.append("Entrance %s lacks a paved approach"%id)
-	if world.building_entrances.size()!=8:
-		failures.append("Door audit must cover five enterable buildings, dealership, service yard, and residence")
+	if world.building_entrances.size()!=9:
+		failures.append("Door audit must include the neighbor apartment as well as the original eight entrances")
+	if not world.interior_nodes.has("deerfield_social") or world.interior_nodes.deerfield_social.position.x!=1000.0:
+		failures.append("Neighbor apartment needs a separate furnished interior")
+	for id: String in ["west_overlook","service_lane","east_trail"]:
+		if not world.landmarks.has(id) or not world.is_paved_surface(world.get_landmark(id)):
+			failures.append("Outskirts rendezvous lacks a reachable paved marker: "+id)
+	for route: PackedVector3Array in world.campus_police_routes:
+		for index in route.size():
+			for step in 20:
+				if world.get_district(route[index].lerp(route[(index+1)%route.size()],float(step)/20.0))!="Campus":
+					failures.append("Campus patrol route crosses its movement jurisdiction")
+	for id: String in world.pedestrian_activities:
+		for rect: Rect2 in world.obstacle_rects:
+			var destination: Vector3 = world.pedestrian_activities[id].position
+			if rect.grow(0.6).has_point(Vector2(destination.x,destination.z)):
+				failures.append("Pedestrian activity sits inside a wall: "+id)
 	if world.get_district(world.get_landmark("supplier"))!="College Square":
 		failures.append("Service yard uses the wrong police jurisdiction")
 	var road_conflicts: Dictionary = {}

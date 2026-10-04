@@ -44,6 +44,19 @@ func _run() -> void:
 	camera.look_at(Vector3(20,0,50))
 	sun.directional_shadow_max_distance = 100
 	await _capture("02-campus-paving")
+	var sites := {"03-west-parking":Vector3(-86,0,46),"04-west-overlook":world.get_landmark("west_overlook"),"05-freight-lane":world.get_landmark("service_lane"),"06-east-trail":world.get_landmark("east_trail"),"07-neighbor-door":world.get_landmark("deerfield_social")}
+	for filename: String in sites:
+		var at: Vector3 = sites[filename]
+		camera.size = 68 if filename=="03-west-parking" else 30
+		camera.position = at+Vector3(10,45,26)
+		camera.look_at(at)
+		world.update_camera_occlusion(camera.position,at)
+		await _capture(filename)
+	world.enter_interior("deerfield_social")
+	camera.size = 26
+	camera.position = Vector3(1000,0,0)+Vector3(10,45,26)
+	camera.look_at(Vector3(1000,0,0))
+	await _capture("08-neighbor-room")
 	world.queue_free()
 	await process_frame
 	print("WORLD QA CAPTURES: ",output_directory)

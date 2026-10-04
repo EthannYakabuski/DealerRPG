@@ -4,6 +4,7 @@ var world: Node3D
 var player: StudentPlayer
 var population: CityPopulation
 var party_guests: Node3D
+var supplier_encounters: Node3D
 var camera: Camera3D
 var sun: DirectionalLight3D
 var environment: Environment
@@ -57,6 +58,12 @@ func _ready() -> void:
 	party_guests=load("res://scripts/party_guests.gd").new()
 	add_child(party_guests)
 	party_guests.setup(world,player,population)
+	supplier_encounters=load("res://scripts/supplier_encounters.gd").new()
+	add_child(supplier_encounters)
+	supplier_encounters.setup(world,player,population)
+	party_guests.supplier_encounters=supplier_encounters
+	supplier_encounters.party_guests=party_guests
+	population.social_actor_providers.assign([party_guests,supplier_encounters])
 	player.attacked.connect(population.attack)
 	ui=load("res://scripts/interface.gd").new()
 	ui.game_root=self
@@ -253,6 +260,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func start_game(resume:bool) -> void:
 	end_conversation()
 	party_guests.reset()
+	supplier_encounters.reset()
 	if resume:
 		if not Game.load_game():
 			Game.restart_game()
@@ -284,6 +292,7 @@ func _capture_world_state() -> void:
 		data.meeting_walks=population.capture_meeting_state()
 	data.informant_runs=population.capture_informant_state()
 	data.party_walks=party_guests.capture()
+	data.supplier_walks=supplier_encounters.capture()
 	for car in population.vehicles:
 		if bool(car.get("owned",false)):
 			var parked:Vector3=car.node.position
@@ -332,6 +341,7 @@ func _restore_world_state() -> void:
 	for npc_id: String in Game.pending_civilian_reports():
 		population.start_informant_run(npc_id)
 	party_guests.restore(data.get("party_walks",[]))
+	supplier_encounters.restore(data.get("supplier_walks",[]))
 	_update_location()
 
 func _update_location() -> void:
@@ -359,13 +369,15 @@ func _interaction_text() -> String:
 			return "E  Catch up with %s"%guest.name
 		if player.position.distance_to(world.get_interior_exit())<3.3:
 			return "E  Leave building"
-		return "E  Apartment options  •  B  Backpack" if world.current_interior=="home" else "E  "+("Campus services" if world.current_interior in ["classroom","library"] else "Shop here")
+		return "E  Apartment options  •  B  Backpack" if world.current_interior in ["home","deerfield_social"] else "E  "+("Campus services" if world.current_interior in ["classroom","library"] else "Shop here")
 	if Game.tutorial_step<3 and player.position.distance_to(population.friend.position)<4.8:
 		if Game.tutorial_step==0:
 			return "MILO  ‘Got a dime bag?’     B  Open backpack"
 		if Game.tutorial_step==1:
 			return "E  Sell a dime bag to Milo"
 		return "TAB  Save Milo in your contacts"
+	var connection: Dictionary=supplier_encounters.nearest()
+	if not connection.is_empty(): return "E  Talk to %s" % connection.name
 	for meeting in Game.active_meetings():
 		if meeting.status=="scheduled" and closest_location==meeting.location_id:
 			if Game.minute>=float(meeting.due_minute)-Game.MEETING_ARRIVAL_MINUTES and population.meeting_walks.get(str(int(meeting.id)),{}).get("state","approaching")=="approaching":
@@ -392,7 +404,7 @@ func interact() -> void:
 			_show_conversation()
 		elif player.position.distance_to(world.get_interior_exit())<3.3:
 			_teleport(world.exit_interior()+Vector3(0,0.3,0))
-		elif world.current_interior=="home":
+		elif world.current_interior in ["home","deerfield_social"]:
 			ui.show_page("home")
 		elif world.current_interior in ["library","classroom"]:
 			ui.show_page("campus")
@@ -401,6 +413,12 @@ func interact() -> void:
 		return
 	if Game.tutorial_step==1 and player.position.distance_to(population.friend.position)<4.8:
 		Game.tutorial_sell()
+		return
+	var connection: Dictionary=supplier_encounters.nearest()
+	if not connection.is_empty():
+		conversation_id="supplier:"+str(connection.id)
+		supplier_encounters.conversation_id=str(connection.id)
+		_show_conversation()
 		return
 	for meeting in Game.active_meetings():
 		if meeting.status=="scheduled" and closest_location==meeting.location_id:
@@ -429,6 +447,8 @@ func interact() -> void:
 			ui.show_page("shop")
 		"home":
 			ui.show_page("home")
+		"deerfield_social":
+			enter_building("deerfield_social")
 		"library":
 			enter_building("library")
 		"campus_quad":
@@ -447,6 +467,14 @@ func _conversation_target() -> Dictionary:
 
 func _show_conversation(response: String="") -> void:
 	if conversation_id=="": return
+	if conversation_id.begins_with("supplier:"):
+		var encounter_id:=conversation_id.trim_prefix("supplier:")
+		if not supplier_encounters.in_reach(encounter_id):
+			ui.close_page()
+			end_conversation()
+			return
+		ui.show_supplier_conversation(Game.supplier_encounter_view(encounter_id))
+		return
 	if conversation_id.begins_with("party:"):
 		var contact_id:=conversation_id.trim_prefix("party:")
 		if not party_guests.in_reach(contact_id):
@@ -497,10 +525,23 @@ func conversation_action(npc_id: String, action: String) -> void:
 			var citizen := population.nearest_conversational_npc(4.0)
 			_show_conversation(Game.street_smalltalk(npc_id,str(citizen.get("goal",""))))
 
+func supplier_conversation_action(action: String) -> void:
+	if not conversation_id.begins_with("supplier:"): return
+	var encounter_id:=conversation_id.trim_prefix("supplier:")
+	if action=="leave" or not supplier_encounters.in_reach(encounter_id):
+		ui.close_page()
+		end_conversation()
+		return
+	_update_location()
+	var accepted: bool=Game.supplier_encounter_action(encounter_id,action)
+	load("res://scripts/npc_emote.gd").play(supplier_encounters.actors[encounter_id].node,"happy" if accepted else "question")
+	_show_conversation()
+
 func end_conversation() -> void:
 	conversation_id = ""
 	if is_instance_valid(population): population.end_conversation()
 	if is_instance_valid(party_guests): party_guests.conversation_contact=""
+	if is_instance_valid(supplier_encounters): supplier_encounters.conversation_id=""
 
 func _on_party_reaction(contact_id: String, kind: String) -> void:
 	if is_instance_valid(party_guests) and party_guests.guests.has(contact_id):
@@ -537,6 +578,11 @@ func postpone_in_person(meeting_id: int, delay_minutes: int=120) -> bool:
 	return Game.postpone_meeting(meeting_id,delay_minutes)
 
 func enter_building(id:String) -> void:
+	if id=="deerfield_social":
+		var party: Dictionary=Game.party_summary()
+		if not bool(party.get("active",false)) or str(party.get("location_id","home"))!="deerfield_social":
+			Game.notification.emit("The neighbours' apartment is private. Accept a party invitation and come back when it starts.")
+			return
 	if player.vehicle:
 		Game.notification.emit("Park your vehicle before entering.")
 		return

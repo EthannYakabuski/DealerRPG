@@ -48,7 +48,7 @@ func _run() -> void:
 	_check(game.cash==75 and game.inventory.dime_bag==stock,"Supplies cost cash but never automatically consume product")
 	_check(game.invite_party_contact("milo") and game.invite_party_contact("street_citizen_03"),"Known contacts accept individual invitations")
 	scene.party_guests._sync()
-	_check(scene.party_guests.guests.size()==2,"Each invite creates one actual walking guest")
+	_check(scene.party_guests.guests.size()==game.party_summary().guests.size(),"Each invite and any supplier visitor creates one actual walking guest")
 	_check(scene.party_guests.guests.street_citizen_03.node==scene.population._citizens_by_id.citizen_03.node,"Street contact keeps their original body rather than creating a duplicate pedestrian")
 	for guest: Dictionary in scene.party_guests.guests.values():
 		if not guest.has("citizen_id"): _check(scene.population._point_offscreen(guest.node.position),"New guests begin outside the visible camera area")

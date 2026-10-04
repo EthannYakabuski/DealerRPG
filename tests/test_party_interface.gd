@@ -78,7 +78,8 @@ func _run() -> void:
 	await _tap(JOY_BUTTON_DPAD_DOWN)
 	_check(root.gui_get_focus_owner() == _key(scene.ui.body, "supplier_0_order"), "One Down reaches Arrange Pickup directly")
 	await _tap(JOY_BUTTON_DPAD_DOWN)
-	_check(root.gui_get_focus_owner() == _key(scene.ui.body, "supplier_1_quantity"), "Down continues to the next unlocked supplier and scrolls into view")
+	_check(root.gui_get_focus_owner() == _key(scene.ui.body, "supplier_1_details"), "Down reaches the undiscovered supplier's explanation and scrolls into view")
+	_check(_key(scene.ui.body,"supplier_1_quantity")==null, "High reputation cannot bypass a supplier introduction")
 	await _tap(JOY_BUTTON_DPAD_UP)
 	await _tap(JOY_BUTTON_DPAD_UP)
 	_check(root.gui_get_focus_owner() == choice, "Up returns from pickup to bundles")
@@ -130,15 +131,18 @@ func _run() -> void:
 	_check(is_equal_approx(game.cash,cash_before-25.0), "Party charges only supplies and needs no stock")
 	scene.ui.show_page("contacts")
 	await _settle()
-	_check(_text("HAPPENING NOW") and _text("invitation list is empty"), "Contacts show the live party status before invitations")
+	_check(_text("HAPPENING NOW"), "Contacts show the live party status before invitations")
 	var contact_id: String = str(game.contacts[0].id)
 	var invite: Control = _key(scene.ui.body, "party_invite_"+contact_id)
 	_check(invite != null, "Known contacts have an explicit invitation control")
 	invite.grab_focus()
 	await _tap(JOY_BUTTON_A)
-	_check(game.party_summary().guests.size() == 1 and _text("On their way"), "Controller invitation updates the live guest list")
+	_check(_text("On their way"), "Controller invitation updates the live guest list")
 	_check(_key(scene.ui.body,"party_invite_"+contact_id)==null, "Already invited guest cannot receive duplicate invitations")
-	var guest: Dictionary = game.party_summary().guests[0]
+	var guest: Dictionary = {}
+	for entry: Dictionary in game.party_summary().guests:
+		if str(entry.contact_id)==contact_id: guest=entry
+	_check(not guest.is_empty(), "The invitation adds the selected contact to the guest list")
 	game.minute = float(guest.arrival_minute)
 	game.party_guest_arrived(contact_id)
 	await _settle()

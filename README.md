@@ -56,18 +56,22 @@ Milo's first follow-up arrives about ninety game minutes after saving his number
 - Referral texts let you ask about the referrer and their shared history before accepting a new contact. Compare replies with known contact profiles; a coherent answer is a clue, never a guarantee.
 - Proactive offers to saved contacts, occasional requests for a discount, tomorrow replies and in-person postponements.
 - Relationships affected by punctuality, price, quality, cancellation and no-shows.
-- Three suppliers with different reputation gates, prices, stock quality and bust risk.
+- Three suppliers with social introductions, different prices, stock quality and bust risk. Each supplier needs two game days between new orders; a postponed pickup remains the same obligation.
 - A finite backpack, food, energy, skateboard, late-game firearm/ammunition and owned car.
-- Campus security and city police with a forward view cone, close-range awareness, pursuit, escape and hardcore arrest. Ordinary handoffs must be visible: patrols see within a 110-degree cone, or within three metres from any direction, and walls always block their view. Informant reports and planned stings can still dispatch police.
-- Animated pedestrians, spaced social groups, daily destination changes, flowing road traffic, a roaming police cruiser and parked vehicles. Moving traffic can injure you and knock you off your board.
+- Campus security and city police with a forward view cone, close-range awareness, pursuit, escape and hardcore arrest. Ordinary handoffs must be visible: patrols see within a 220-degree cone, or within six metres from any direction, and walls always block their view. Informant reports and planned stings can still dispatch police.
+- Animated pedestrians with a majority of solo walkers, spaced social groups, varied destinations and time spent at each stop, flowing road traffic, a roaming police cruiser and parked vehicles. Moving traffic can injure you and knock you off your board.
 - Live meeting countdowns, clickable directions, transaction pop-ups and original sounds for packing, sales, purchases, texts and police events.
 - Vehicle theft, recognizable stolen cars, on-foot melee and ranged combat reactions.
-- Classes, paid campus shifts, sleep, evening parties, and incremental tuition payments.
+- One class per day (09:00 most days, 14:00 every third day), paid campus shifts, sleep, evening parties, and incremental tuition payments. Meetings can be booked in consecutive 30-minute slots.
 - Morning, afternoon, evening, dusk and night lighting; warm shop and interior lights.
-- Furnished apartment, market, cafe, lecture hall and learning commons interiors.
+- Furnished player and neighbor apartments, market, cafe, lecture hall and learning commons interiors.
 - Automatic and manual saves, resume, explicit restart, and terminal victory/loss screens.
 
 Parties can start at the apartment between 17:00 and 02:00 after reputation 5 and two contacts. Pay $25 for supplies, then invite up to eight contacts from the guest list. Guests walk to your door and gather inside for up to three hours, ending by 02:00. Catching up builds relationships; selling is a separate conversation choice and never consumes stock automatically.
+
+Friends with a relationship of at least 65 occasionally invite you to a gathering at the Deerfield neighbors' apartment. Accept their text, follow the agenda directions, and visit during the party. The host covers supplies. You can chat and choose individual sales just as at your own party.
+
+Rae is your starting supplier. Sable has a 50% chance of attending each party and can also be found at Freight lane between 22:00 and 02:00; introduce yourself in person to exchange numbers. Three completed Sable pickups earn a message introducing the Regent at the East trail shelter. Answer their conversation questions to keep their number. Supplier pickups use remote outskirts locations.
 
 Two consecutive completed meetings at one location attract extra attention; three bring heavier patrols. New pursuits add local officers and increase the time you must remain unseen: 10, 10, 15, 20, 25, 30 seconds, then another 10 per pursuit. Extra local patrols leave after a full game day without another bust there. The outskirts now have their own walkers and patrol routes, and some residents walk to parked cars, drive a circuit and return to a vacant space.
 

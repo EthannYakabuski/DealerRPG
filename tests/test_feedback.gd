@@ -73,15 +73,15 @@ func _run() -> void:
 	_check(scene.ui.meeting_card.visible and scene.ui.labels.meeting_contact.text==str(next.contact_name),"HUD prioritizes the earliest appointment across both meeting types")
 	_check(scene.ui.labels.meeting_heading.text=="NEXT PICKUP" and next.type=="supplier","Supplier pickups appear on the HUD")
 	_check("+1 LATER" in scene.ui.labels.meeting_hint.text,"HUD reports the rest of the schedule")
-	_check(scene.ui.labels.meeting_place.text=="West parking lot","Card names the target location")
+	_check(scene.ui.labels.meeting_place.text==load("res://scripts/game_data.gd").location_name(str(next.location_id)),"Card names the actual rotating pickup location")
 	game.paused=false
 	var before_route:float=game.minute
 	scene.ui.meeting_card.pressed.emit()
-	_check(scene.destination=="car_park" and scene.navigation_marker!=null,"Clicking the live card activates existing world directions")
+	_check(scene.destination==str(next.location_id) and scene.navigation_marker!=null,"Clicking the live card activates existing world directions")
 	_check(not game.paused and scene.ui.page=="" and game.minute==before_route,"Directions do not open a dialog or pause the simulation")
 	game.paused=true
 	var due:float=float(next.due_minute)
-	scene.player.position=scene.world.get_landmark("car_park")
+	scene.player.position=scene.world.get_landmark(str(next.location_id))
 	scene._update_location()
 	scene.ui.show_page("agenda")
 	var wait_button:Button=null

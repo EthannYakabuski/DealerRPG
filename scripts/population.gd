@@ -12,8 +12,8 @@ const Trips = preload("res://scripts/city_car_trips.gd")
 const Emotes = preload("res://scripts/npc_emote.gd")
 const GROUP_SPACING: float = 1.75
 const PEDESTRIAN_CLEARANCE: float = 1.5
-const POLICE_CLOSE_AWARENESS: float = 3.0
-const POLICE_VIEW_COSINE: float = 0.573576436 # cos(55 degrees): a 110-degree forward cone.
+const POLICE_CLOSE_AWARENESS: float = 6.0
+const POLICE_VIEW_COSINE: float = -0.342020143 # cos(110 degrees): a 220-degree forward cone.
 var world: Node3D
 var player: StudentPlayer
 var citizens: Array[Dictionary] = []
@@ -21,6 +21,7 @@ var vehicles: Array[Dictionary] = []
 var police: Array[Dictionary] = []
 var meeting_actors: Dictionary = {}
 var meeting_walks: Dictionary = {}
+var social_actor_providers: Array[Node] = []
 var _pedestrian_neighbors: Array[Dictionary] = []
 var _neighbor_refresh := 0.0
 var _animation_lod_timer := 0.0
@@ -35,9 +36,11 @@ var crime_age := 1000.0
 var friend: Node3D
 var lod_tick := 0.0
 var navigation := AStarGrid2D.new()
-var _last_schedule_hour := -1
 var _active_conversation := ""
 var _citizens_by_id: Dictionary = {}
+var _activity_plans: Dictionary = {}
+var _last_routine_phase := ""
+var _activity_timer := 0.0
 var car_trips: RefCounted
 var _pressure_timer := 0.0
 
@@ -50,29 +53,38 @@ func setup(city: Node3D, student: StudentPlayer) -> void:
 	var routes: Array = world.pedestrian_routes
 	for index in range(CITIZEN_COUNT):
 		if routes.is_empty(): break
-		var group_id: int = index / 3
-		var route: PackedVector3Array = routes[group_id % routes.size()] if index<42 else world.outskirts_routes[(index-42)/3]
+		var cohort: int = index / 3
+		var solo := index%9>=3
+		var group_id: int = 100+index if solo else cohort
+		var route: PackedVector3Array = routes[cohort % routes.size()] if index<42 else world.outskirts_routes[(index-42)/3]
 		if route.size() < 2: continue
 		var names := ["character-female-a","character-male-d","character-female-e","character-male-b","character-female-f","character-male-e"]
 		var actor := _person(names[index % names.size()],1.7+rng.randf_range(-0.08,0.14))
-		var spawn: Dictionary = _sample_route(route,0.12+float(group_id / routes.size())/3.0)
-		var offset := Vector3(float(index%3-1)*GROUP_SPACING,0,float(index%2)*1.1)
+		var spawn: Dictionary = _sample_route(route,fmod(0.12+float(cohort / routes.size())/3.0+(float(index%3)*0.23 if solo else 0.0),0.96))
+		var offset := Vector3.ZERO if solo else Vector3(float(index%3-1)*GROUP_SPACING,0,float(index%2)*1.1)
 		actor.position = _safe_pedestrian_target(spawn.position + offset)
 		citizens.append({"node":actor,"route":route,"index":spawn.index,"speed":1.2+float(group_id%3)*0.12,"hp":100.0,"panic":0.0,"stun":0.0,"wait":float(group_id%3),"goal":"Heading to class","group":group_id,"offset":offset,"nav_path":PackedVector3Array(),"nav_index":0,"nav_target":Vector3.INF,"nav_timer":0.0,"dead_seconds":0.0})
 		var identity := "citizen_%02d"%index
 		var citizen: Dictionary = citizens.back()
 		citizen.id = identity
+		citizen.solo = solo
+		citizen.routine_zone = cohort%5 if index<42 else 5+(index-42)/3
+		citizen.activity_arrived = false
+		citizen.activity_id = ""
 		citizen.name = _civilian_name(index)
 		citizen.conversation = false
 		citizen.reporting = false
 		citizen.reported = false
 		citizen.report_retry = 0.0
 		_citizens_by_id[identity] = citizen
+		if not _activity_plans.has(group_id): _activity_plans[group_id] = {"members":[],"zone":citizen.routine_zone,"serial":0,"last":"","previous":"","remaining":0.0}
+		_activity_plans[group_id].members.append(identity)
 	for index in range(BASE_POLICE_COUNT):
 		var campus := index < 4 or index in [7,9]
 		var patrols: Array = world.campus_police_routes if campus else world.city_police_routes
 		if patrols.is_empty(): continue
 		var route: PackedVector3Array = patrols[index%(3 if campus else 2)] if index<7 else (world.campus_police_routes[3] if index==7 else (world.city_police_routes[2] if index==8 else world.campus_police_routes[4]))
+		if index==6: route = world.city_police_routes[4]
 		if route.size() < 2: continue
 		var actor := _person("character-male-c",1.9)
 		var spawn: Dictionary = _sample_route(route,0.16+float(index % 4)*0.20)
@@ -122,6 +134,9 @@ func reset_population() -> void:
 		child.queue_free()
 	citizens.clear()
 	_citizens_by_id.clear()
+	_activity_plans.clear()
+	_last_routine_phase = ""
+	_activity_timer = 0.0
 	_active_conversation = ""
 	vehicles.clear()
 	police.clear()
@@ -135,7 +150,6 @@ func reset_population() -> void:
 	arrest_seconds = 0.0
 	stolen_vehicle = false
 	crime_age = 1000.0
-	_last_schedule_hour = -1
 	_pressure_timer = 0.0
 	car_trips = null
 	player.reset_travel()
@@ -234,6 +248,10 @@ func _physics_process(delta: float) -> void:
 		_sync_pressure_patrols()
 		_pressure_timer = 2.0
 	if car_trips: car_trips.update(delta)
+	_activity_timer += delta
+	if _activity_timer>=0.25:
+		_update_activity_plans(_activity_timer)
+		_activity_timer = 0.0
 	for citizen: Dictionary in citizens:
 		_update_citizen(citizen,delta,indoor)
 	_update_traffic(delta,indoor)
@@ -298,15 +316,15 @@ func _update_citizen(citizen: Dictionary, delta: float, indoor: bool) -> void:
 		_settle_idle_spacing(citizen,delta)
 		ActorVisuals.play(actor,"idle")
 		return
-	var route: PackedVector3Array = citizen.route
-	if int(citizen.get("target_index",-1))!=int(citizen.index):
-		citizen.walk_target = _safe_pedestrian_target(route[int(citizen.index)]+Vector3(citizen.offset))
-		citizen.target_index = int(citizen.index)
+	if bool(citizen.get("activity_arrived",false)):
+		_settle_idle_spacing(citizen,delta)
+		ActorVisuals.play(actor,"idle")
+		return
 	var target: Vector3 = citizen.walk_target
-	if _horizontal_distance(actor.position,target) < 1.2:
-		citizen.index = (int(citizen.index)+1)%route.size()
-		citizen.wait = 1.0+float(int(citizen.group)%4)
-		if Game.current_phase() in ["Evening","Dusk","Night"]: citizen.wait = 8.0+float(int(citizen.group)%4)*3.0
+	if _horizontal_distance(actor.position,target)<1.2:
+		citizen.activity_arrived = true
+		citizen.goal = world.pedestrian_activities[citizen.activity_id].stay
+		ActorVisuals.play(actor,"idle")
 	else:
 		_move_person(citizen,target,float(citizen.speed),delta)
 
@@ -345,16 +363,52 @@ func _settle_idle_spacing(record: Dictionary, delta: float) -> void:
 	actor.move_and_slide()
 
 func _update_citizen_schedule() -> void:
-	var hour := int(Game.minute/60.0)
-	if hour == _last_schedule_hour: return
-	_last_schedule_hour = hour
-	var hour_of_day := hour%24
-	for citizen: Dictionary in citizens:
-		var group := int(citizen.group)
-		var route_index := group % maxi(1,world.pedestrian_routes.size())
-		var day_goals := ["Heading to class","Lunch at College Square","Walking home with friends","Study group at the residence","Meeting friends at the quad"]
-		var night_goals := ["Evening study group","Late takeout with friends","Heading home","Hanging out outside residence","Hanging out near the parking lot"]
-		citizen.goal = (night_goals if hour_of_day >= 18 or hour_of_day < 7 else day_goals)[route_index%5]
+	var phase: String = Game.current_phase()
+	if phase==_last_routine_phase: return
+	_last_routine_phase = phase
+	for group_id: int in _activity_plans: _choose_activity(group_id)
+
+func _update_activity_plans(delta: float) -> void:
+	for group_id: int in _activity_plans:
+		var plan: Dictionary = _activity_plans[group_id]
+		var present := 0
+		var arrived := 0
+		for id: String in plan.members:
+			var citizen: Dictionary = _citizens_by_id[id]
+			if float(citizen.hp)<=0.0 or citizen.reporting or citizen.get("party_guest",false) or citizen.get("car_trip","")!="": continue
+			present += 1
+			if citizen.activity_arrived: arrived += 1
+		if present==0 or arrived<present: continue
+		plan.remaining = maxf(0.0,float(plan.remaining)-delta)
+		if float(plan.remaining)<=0.0: _choose_activity(group_id)
+
+func _choose_activity(group_id: int) -> void:
+	var plan: Dictionary = _activity_plans[group_id]
+	var options: Array = world.pedestrian_itineraries[int(plan.zone)]
+	var choices: Array[String] = []
+	var night := Game.current_phase() in ["Evening","Dusk","Night"]
+	for id: String in options:
+		if id==str(plan.last) or id==str(plan.previous): continue
+		if night and str(world.pedestrian_activities[id].kind)=="study": continue
+		choices.append(id)
+	if choices.is_empty():
+		for id: String in options:
+			if id!=str(plan.last) and (not night or str(world.pedestrian_activities[id].kind)!="study"): choices.append(id)
+	var chosen: String = choices[posmod(group_id*31+int(plan.serial)*17+(7 if night else 0),choices.size())]
+	plan.previous = plan.last
+	plan.last = chosen
+	plan.serial = int(plan.serial)+1
+	plan.remaining = 18.0+float(posmod(group_id*7+int(plan.serial)*11,23))+(14.0 if night else 0.0)
+	var activity: Dictionary = world.pedestrian_activities[chosen]
+	for id: String in plan.members:
+		var citizen: Dictionary = _citizens_by_id[id]
+		citizen.activity_id = chosen
+		citizen.activity_arrived = false
+		citizen.walk_target = _safe_pedestrian_target(Vector3(activity.position)+Vector3(citizen.offset))
+		citizen.goal = str(activity.travel)
+		citizen.nav_path = PackedVector3Array()
+		citizen.nav_index = 0
+		citizen.nav_target = Vector3.INF
 
 func _update_traffic(delta: float, indoor: bool) -> void:
 	# Only vehicles whose actual lane corridor intersects ours cause a queue.
@@ -613,8 +667,10 @@ func _move_person(record: Dictionary, target: Vector3, speed: float, delta: floa
 			if direction.dot(-away/gap)>0.6:
 				separation += Vector3(direction.z,0,-direction.x)*(PEDESTRIAN_CLEARANCE-gap)*0.9
 		direction = (direction+separation).normalized()
-	if record.has("campus") and _is_campus(actor.position+direction*speed*delta) != bool(record.campus):
-		if _is_campus(actor.position) == bool(record.campus): return
+	if record.has("campus") and bool(record.campus) and not _is_campus(actor.position+direction*speed*delta):
+		if _is_campus(actor.position): return
+	# City officers may transit between detached city districts. Their sight and
+	# arrest checks still reject campus incidents, including during this transit.
 	actor.velocity.x = direction.x*speed
 	actor.velocity.z = direction.z*speed
 	actor.velocity.y = -0.5 if actor.is_on_floor() else maxf(-12.0,actor.velocity.y-delta*20.0)
@@ -1020,6 +1076,11 @@ func attack(kind: String) -> void:
 func _sync_meetings() -> void:
 	if not world: return
 	var live: Array[String] = []
+	var party_contacts: Dictionary = {}
+	var party: Dictionary = Game.party_summary()
+	if bool(party.get("active",false)):
+		for guest: Dictionary in party.get("guests",[]):
+			party_contacts[str(guest.contact_id)] = true
 	for meeting: Dictionary in Game.meetings:
 		if meeting.status!="scheduled": continue
 		var id := str(int(meeting.id))
@@ -1030,13 +1091,21 @@ func _sync_meetings() -> void:
 				_fast_forward_offscreen(existing,Game.minute-float(existing.last_minute))
 			existing.last_minute = Game.minute
 			continue
+		# Social helpers retain ownership through their final offscreen departure.
+		# A future appointment must not create a second copy of the same person.
+		var busy := party_contacts.has(str(meeting.contact_id))
+		for provider: Node in social_actor_providers:
+			if is_instance_valid(provider) and provider.has_contact_actor(str(meeting.contact_id)): busy = true
+		if busy: continue
 		if Game.minute<float(meeting.due_minute)-90.0 or not world.landmarks.has(meeting.location_id): continue
 		var landmark: Vector3 = world.landmarks[meeting.location_id].position
 		var cell := _nearest_open_cell(landmark+Vector3(2.2,0,1.8))
 		var target := Vector3(cell.x*NAV_CELL,0.2,cell.y*NAV_CELL)
 		var start := _offscreen_walk_point(target)
 		if not start.is_finite(): continue
-		var actor := _person("character-male-e" if meeting.type=="supplier" else "character-female-b",1.8)
+		var asset := "character-female-b"
+		if meeting.type=="supplier": asset = "character-female-f" if str(meeting.contact_id)=="supplier_1" else "character-male-e"
+		var actor := _person(asset,1.8)
 		actor.position = start
 		var tag := ActorVisuals.label(str(meeting.contact_name).to_upper(),Color("edc37e"),22)
 		tag.position.y = 2.5

@@ -15,10 +15,11 @@ const ITEMS: Dictionary = {
 	"ammo": {"name": "Ammunition", "weight": 0.025, "price": 3, "description": "One shot. Violence is risky and never required to graduate."},
 }
 const SUPPLIERS: Array[Dictionary] = [
-	{"tier": 0, "name": "Rae", "title": "The local connection", "reputation_required": 0, "bundle_price": 46, "quality": 0.72, "risk": 0.05, "max_bundles": 4, "location_id": "car_park"},
-	{"tier": 1, "name": "Sable", "title": "The district connection", "reputation_required": 8, "bundle_price": 40, "quality": 0.87, "risk": 0.12, "max_bundles": 8, "location_id": "car_park"},
-	{"tier": 2, "name": "The Regent", "title": "The city connection", "reputation_required": 22, "bundle_price": 33, "quality": 0.98, "risk": 0.20, "max_bundles": 12, "location_id": "car_park"},
+	{"tier": 0, "name": "Rae", "title": "The local connection", "reputation_required": 0, "bundle_price": 46, "quality": 0.72, "risk": 0.05, "max_bundles": 4, "location_id": "west_overlook"},
+	{"tier": 1, "name": "Sable", "title": "The district connection", "reputation_required": 0, "bundle_price": 40, "quality": 0.87, "risk": 0.12, "max_bundles": 8, "location_id": "service_lane"},
+	{"tier": 2, "name": "The Regent", "title": "The city connection", "reputation_required": 0, "bundle_price": 33, "quality": 0.98, "risk": 0.20, "max_bundles": 12, "location_id": "east_trail"},
 ]
+const SUPPLIER_SITES: Array[String] = ["west_overlook", "service_lane", "east_trail"]
 const LOCATIONS: Array[Dictionary] = [
 	{"id": "campus_quad", "name": "Campus quad", "district": "Campus"},
 	{"id": "library", "name": "Library steps", "district": "Campus"},
@@ -26,6 +27,10 @@ const LOCATIONS: Array[Dictionary] = [
 	{"id": "home", "name": "Deerfield apartment", "district": "Residential"},
 	{"id": "market", "name": "College Square market", "district": "Commercial"},
 	{"id": "car_park", "name": "West parking lot", "district": "Commercial"},
+	{"id": "west_overlook", "name": "West trail overlook", "district": "Campus", "supplier_only": true},
+	{"id": "service_lane", "name": "Freight lane", "district": "Commercial", "supplier_only": true},
+	{"id": "east_trail", "name": "East trail shelter", "district": "Residential", "supplier_only": true},
+	{"id": "deerfield_social", "name": "Deerfield neighbors", "district": "Residential", "party_only": true},
 ]
 const CONTACT_NAMES: Array[String] = ["Milo", "Jules", "Nia", "Dev", "Avery", "Sam", "Tessa", "Rowan", "Casey", "Morgan", "Lee", "Emery"]
 const CONTACT_COURSES: Array[String] = ["architecture", "culinary arts", "animation", "computer science", "photography", "music production", "design", "journalism", "accounting", "film", "engineering", "hospitality"]

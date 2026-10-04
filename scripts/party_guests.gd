@@ -1,11 +1,13 @@
 extends Node3D
 ## Party guests remain actual walkers outside and conversational people inside.
-const ROOM_SLOTS := [Vector3(-3.2,0.2,-3.0),Vector3(-0.6,0.2,-3.3),Vector3(2.1,0.2,-2.8),Vector3(5.4,0.2,-1.8),Vector3(-3.3,0.2,3.4),Vector3(-0.4,0.2,2.9),Vector3(2.6,0.2,2.7),Vector3(5.6,0.2,3.1)]
+const ROOM_SLOTS := [Vector3(-3.2,0.2,-3.0),Vector3(-0.6,0.2,-3.3),Vector3(2.1,0.2,-2.8),Vector3(5.4,0.2,-1.8),Vector3(-3.3,0.2,3.4),Vector3(-0.4,0.2,2.9),Vector3(2.6,0.2,2.7),Vector3(5.6,0.2,3.1),Vector3(2.6,0.2,0)]
 var world: Node3D
 var player: StudentPlayer
 var population: CityPopulation
+var supplier_encounters: Node3D
 var guests: Dictionary = {}
 var party_id := -1
+var location_id := "home"
 var conversation_contact := ""
 var _dirty := true
 var _lod_timer := 0.0
@@ -28,7 +30,7 @@ func _physics_process(delta: float) -> void:
 		_dirty=false
 		_sync()
 	if Game.paused: return
-	var indoors: bool = world.current_interior=="home"
+	var indoors: bool = world.current_interior==location_id
 	_lod_timer-=delta
 	for contact_id: String in guests.keys():
 		var guest: Dictionary=guests[contact_id]
@@ -42,7 +44,7 @@ func _physics_process(delta: float) -> void:
 		elif guest.state=="exiting":
 			population._set_person_visible(actor,indoors)
 			actor.collision_layer=4 if indoors else 0
-			var exit_point: Vector3=world.interior_nodes.home.position+Vector3(0,0.2,5.8)
+			var exit_point: Vector3=world.interior_nodes[location_id].position+Vector3(0,0.2,5.8)
 			# Guests north of the coffee table use its clear east aisle first.
 			var destination: Vector3=guest.get("exit_waypoint",exit_point)
 			if population._horizontal_distance(actor.position,destination)<0.45:
@@ -51,7 +53,7 @@ func _physics_process(delta: float) -> void:
 			var toward: Vector3=destination-actor.position
 			toward.y=0
 			if population._horizontal_distance(actor.position,exit_point)<0.7:
-				actor.position=world.get_landmark("home")+Vector3(0,0.15,0)
+				actor.position=world.get_landmark(location_id)+Vector3(0,0.15,0)
 				population._grounding_cache.erase(actor.get_instance_id())
 				_begin_departure(guest)
 			else:
@@ -95,15 +97,16 @@ func _sync() -> void:
 			if guest.state in ["leaving","exiting"]: continue
 			if guest.state=="inside":
 				guest.state="exiting"
-				var relative: Vector3=guest.node.position-world.interior_nodes.home.position
+				var relative: Vector3=guest.node.position-world.interior_nodes[location_id].position
 				if relative.z<2.3 and relative.x<1.5:
-					guest.exit_waypoint=world.interior_nodes.home.position+Vector3(2.4,0.2,relative.z)
+					guest.exit_waypoint=world.interior_nodes[location_id].position+Vector3(2.4,0.2,relative.z)
 			else: _begin_departure(guest)
 		conversation_contact=""
 		return
 	if int(summary.id)!=party_id:
 		reset()
 		party_id=int(summary.id)
+		location_id=str(summary.get("location_id","home"))
 	var index:=0
 	for data: Dictionary in summary.guests:
 		var contact_id:=str(data.contact_id)
@@ -118,21 +121,24 @@ func _create(data: Dictionary, slot: int) -> void:
 		_dirty=true
 		return
 	var borrowed: bool=not citizen.is_empty()
-	var actor: CharacterBody3D=citizen.node if borrowed else population._person(models[posmod(contact_id.hash(),models.size())],1.78)
+	var model_id: String="character-female-f" if bool(data.get("supplier",false)) else models[posmod(contact_id.hash(),models.size())]
+	var visitor: CharacterBody3D=null
+	if bool(data.get("supplier",false)) and is_instance_valid(supplier_encounters): visitor=supplier_encounters.release_to_party(contact_id)
+	var actor: CharacterBody3D=citizen.node if borrowed else (visitor if visitor else population._person(model_id,1.78))
 	actor.reparent(self,false)
 	if borrowed:
 		citizen.party_guest=true
 		citizen.conversation=false
 		if citizen.has("name_label"): citizen.name_label.visible=true
-	else:
+	elif not visitor:
 		var label:=ActorVisuals.label(str(data.name).to_upper(),Color("efbf77"),19)
 		label.position.y=2.4
 		actor.add_child(label)
-	var target: Vector3=world.get_landmark("home")
+	var target: Vector3=world.get_landmark(location_id)
 	var start: Vector3=population._offscreen_walk_point(target)
 	if not start.is_finite(): start=Vector3(112,0.2,-88)
 	start=population._safe_pedestrian_target(start+Vector3(float(slot%3-1)*1.8,0,float(slot/3)*1.8))
-	if not borrowed: actor.position=start
+	if not borrowed and not visitor: actor.position=start
 	var record: Dictionary={"node":actor,"name":data.name,"contact_id":contact_id,"slot":slot,"state":"approaching","target":target,"start_minute":Game.minute,"due":float(data.get("arrival_minute",Game.minute)),"door_wait":0.7,"nav_path":PackedVector3Array(),"nav_index":0,"nav_target":Vector3.INF,"nav_timer":0.0,"neighbors":[]}
 	guests[contact_id]=record
 	if borrowed: record.citizen_id=str(citizen.id)
@@ -141,7 +147,7 @@ func _create(data: Dictionary, slot: int) -> void:
 
 func _put_inside(guest: Dictionary) -> void:
 	guest.state="inside"
-	guest.node.position=world.interior_nodes.home.position+ROOM_SLOTS[int(guest.slot)%ROOM_SLOTS.size()]
+	guest.node.position=world.interior_nodes[location_id].position+ROOM_SLOTS[int(guest.slot)%ROOM_SLOTS.size()]
 	guest.node.velocity=Vector3.ZERO
 	# Interior floor is flat; undo the cached exterior support offset.
 	var model: Node3D=guest.node.get_meta("model")
@@ -149,7 +155,7 @@ func _put_inside(guest: Dictionary) -> void:
 	for child: Node in guest.node.get_children():
 		if child is Label3D: child.position.y=2.4
 	population._grounding_cache.erase(guest.node.get_instance_id())
-	population._set_person_visible(guest.node,world.current_interior=="home")
+	population._set_person_visible(guest.node,world.current_interior==location_id)
 	guest.node.collision_layer=4 if guest.node.visible else 0
 
 func _begin_departure(guest: Dictionary) -> void:
@@ -161,7 +167,7 @@ func _begin_departure(guest: Dictionary) -> void:
 	guest.start_minute=Game.minute
 
 func nearest_guest(radius: float=2.6) -> Dictionary:
-	if world.current_interior!="home" or not bool(Game.party_summary().get("active",false)): return {}
+	if world.current_interior!=location_id or not bool(Game.party_summary().get("active",false)): return {}
 	var nearest: Dictionary={}
 	var distance:=radius*radius
 	for contact_id: String in guests:
@@ -173,8 +179,11 @@ func nearest_guest(radius: float=2.6) -> Dictionary:
 			nearest={"contact_id":contact_id,"name":guest.name,"node":guest.node}
 	return nearest
 
+func has_contact_actor(contact_id: String) -> bool:
+	return guests.has(contact_id)
+
 func in_reach(contact_id: String) -> bool:
-	return world.current_interior=="home" and guests.has(contact_id) and guests[contact_id].state=="inside" and player.position.distance_to(guests[contact_id].node.position)<=3.1 and bool(Game.party_summary().get("active",false))
+	return world.current_interior==location_id and guests.has(contact_id) and guests[contact_id].state=="inside" and player.position.distance_to(guests[contact_id].node.position)<=3.1 and bool(Game.party_summary().get("active",false)) and population._line_of_sight(player.position,guests[contact_id].node.position)
 
 func capture() -> Array[Dictionary]:
 	var result: Array[Dictionary]=[]
@@ -213,6 +222,6 @@ func _remove(contact_id: String) -> void:
 			citizen.nav_timer=0.0
 			citizen.nav_path=PackedVector3Array()
 			citizen.nav_target=Vector3.INF
-			if actor.position.x>400: actor.position=world.get_landmark("home")
+			if actor.position.x>400: actor.position=world.get_landmark(location_id)
 		else: actor.queue_free()
 	guests.erase(contact_id)

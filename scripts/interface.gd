@@ -19,6 +19,7 @@ var body: VBoxContainer
 var page := ""
 var selected_message: Dictionary = {}
 var conversation: Dictionary = {}
+var supplier_conversation: Dictionary = {}
 var postpone_meeting_id := -1
 var built_page := ""
 var page_scroll: ScrollContainer
@@ -358,6 +359,11 @@ func _process(delta:float) -> void:
 func _update_hud() -> void:
 	if not game_root.player:
 		return
+	if quick_actions.has("messages"):
+		var unread:int=_pending_phone_count()
+		quick_actions.messages.text=("LB  Phone" if controller_active else "TAB  Phone")+(" (%d)"%unread if unread>0 else "")
+		quick_actions.messages.add_theme_color_override("font_color",LIME if unread>0 else CREAM)
+		quick_actions.messages.tooltip_text="%d conversations waiting for you"%unread if unread>0 else "Your messages"
 	labels.district.text=game_root.district_name()
 	labels.clock.text="DAY %02d   %s  /  %s"%[Game.day_number(),Game.time_text(),Game.current_phase().to_upper()]
 	labels.money.text="$%s   /   CASH"%_money(Game.cash)
@@ -382,6 +388,15 @@ func _update_hud() -> void:
 		var required:float=Game.escape_duration_seconds()
 		labels.objective.text="Patrols are pursuing you. Break their line of sight.\nEscape: %ds / %ds clear"%[mini(int(game_root.population.escape_seconds),int(required)),int(required)]
 	_update_meeting_card()
+
+func _pending_phone_count() -> int:
+	var total:int=1 if Game.tutorial_step==2 else 0
+	for message:Dictionary in Game.inbox:
+		if str(message.status)=="new": total+=1
+	total+=Game.pending_introductions().size()+Game.pending_supplier_introductions().size()
+	for invitation:Dictionary in Game.party_invitations():
+		if str(invitation.status)=="new": total+=1
+	return total
 
 func _build_meeting_card() -> void:
 	meeting_card=Button.new()
@@ -548,14 +563,14 @@ func toggle_page(id:String) -> void:
 		show_page(id)
 
 func show_page(id:String) -> void:
-	if page=="conversation" and id!="conversation" and game_root.has_method("end_conversation"):
+	if page in ["conversation","supplier_conversation"] and id!=page and game_root.has_method("end_conversation"):
 		game_root.end_conversation()
 	page=id
 	Game.paused=true
 	_build_page()
 
 func close_page() -> void:
-	if page=="conversation" and game_root.has_method("end_conversation"):
+	if page in ["conversation","supplier_conversation"] and game_root.has_method("end_conversation"):
 		game_root.end_conversation()
 	page=""
 	built_page=""
@@ -639,6 +654,7 @@ func _build_page() -> void:
 		"pause":_pause_page()
 		"confirm_restart":_restart_page()
 		"conversation":_conversation_page()
+		"supplier_conversation":_supplier_conversation_page()
 		"postpone":_postpone_page()
 		_:_help_page()
 	toast_panel.move_to_front()
@@ -747,6 +763,24 @@ func show_conversation(context:Dictionary) -> void:
 	conversation=context.duplicate(true)
 	show_page("conversation")
 
+func show_supplier_conversation(context:Dictionary) -> void:
+	supplier_conversation=context.duplicate(true)
+	show_page("supplier_conversation")
+
+func _supplier_conversation_page() -> void:
+	_heading(str(supplier_conversation.get("name","A new connection")),"Make an introduction, face to face.")
+	var card:=_card()
+	_paragraph(str(supplier_conversation.get("text","They wait for you to say something.")),card,CREAM)
+	if bool(supplier_conversation.get("complete",false)):
+		_paragraph("CONNECTION SAVED  /  Find them in Suppliers on your phone.",card,LIME)
+	var retry:float=float(supplier_conversation.get("retry_minute",0.0))
+	if retry>Game.minute:
+		_paragraph("Give them some time. You can try again after %s."%_when(retry),card,AMBER)
+	for choice:Dictionary in supplier_conversation.get("choices",[]):
+		var action:String=str(choice.id)
+		_button(str(choice.label),func():game_root.supplier_conversation_action(action),card,false,"supplier_chat_"+action)
+	_button("LEAVE",func():game_root.supplier_conversation_action("leave"),body,false,"supplier_chat_leave")
+
 func _conversation_page() -> void:
 	_heading(str(conversation.get("name","Someone nearby")),str(conversation.get("district","A conversation on the street")))
 	var card:=_card()
@@ -755,7 +789,8 @@ func _conversation_page() -> void:
 	var actor_id:String=str(conversation.get("actor_id",conversation.get("npc_id","")))
 	var party_guest:bool=bool(conversation.get("party_guest",false))
 	if bool(conversation.get("can_chat",true)):
-		_button("CATCH UP" if party_guest else "MAKE SMALL TALK",func():game_root.conversation_action(actor_id,"smalltalk"),card,false,"street_talk")
+		var talk_label:String="INTRODUCE YOURSELF" if bool(conversation.get("supplier",false)) else ("CATCH UP" if party_guest else "MAKE SMALL TALK")
+		_button(talk_label,func():game_root.conversation_action(actor_id,"smalltalk"),card,false,"street_talk")
 	if bool(conversation.get("can_offer",true)):
 		_button("OFFER A BAG  /  $%s"%_money(float(conversation.get("price",22))),func():game_root.conversation_action(actor_id,"offer"),card,true,"street_offer")
 	if bool(conversation.get("can_add_contact",false)):
@@ -814,6 +849,18 @@ func _messages_page() -> void:
 	if Game.tutorial_step<2:
 		_paragraph("Your phone is quiet. Milo is waiting outside class. Start with your backpack.")
 	var count:=0
+	for introduction:Dictionary in Game.pending_supplier_introductions():
+		count+=1
+		var card:=_card()
+		card.add_child(_label(str(introduction.name).to_upper()+"  /  PERSONAL INTRODUCTION",18,AMBER))
+		_paragraph(str(introduction.text),card,CREAM)
+		var location:String=str(introduction.location_id)
+		_paragraph(Data.location_name(location),card,LIME)
+		_button("DIRECTIONS TO THE INTRODUCTION",func():game_root.navigate(location);close_page(),card,true,"supplier_intro_"+str(introduction.id))
+	for invitation:Dictionary in Game.party_invitations():
+		if str(invitation.status)!="new": continue
+		count+=1
+		_party_invitation_card(invitation)
 	for introduction:Dictionary in Game.pending_introductions():
 		count+=1
 		_introduction_card(introduction)
@@ -833,7 +880,7 @@ func _messages_page() -> void:
 		var current:Dictionary=message.duplicate(true)
 		var message_id:int=int(message.id)
 		if callback:
-			_paragraph("Pickups run 22:00–02:00. Next available: %s."%_when(Game.next_supplier_minute()),card,AMBER)
+			_paragraph("Pickups run 22:00–02:00. Next available: %s."%_when(Game.supplier_pickup_minute(int(message.tier))),card,AMBER)
 			_button("ARRANGE THIS PICKUP",func():
 				if Game.accept_supplier_callback(message_id): show_page("agenda"),card,true,"pickup_%d"%message_id)
 		else:
@@ -845,6 +892,17 @@ func _messages_page() -> void:
 	if count==0 and Game.tutorial_step>=3:
 		_paragraph("All caught up. New texts arrive as time passes. Better relationships bring more introductions.")
 		_button("CHECK YOUR AGENDA",func():show_page("agenda"))
+
+func _party_invitation_card(invitation:Dictionary) -> void:
+	var card:=_card()
+	var id:int=int(invitation.id)
+	card.add_child(_label(str(invitation.host_name).to_upper()+"  /  PARTY INVITATION",18,AMBER))
+	_paragraph(str(invitation.text),card,CREAM)
+	_paragraph("%s until %s\n%s"%[_when(float(invitation.start_minute)),Game.format_minute(float(invitation.end_minute)),Data.location_name(str(invitation.location_id))],card)
+	var actions:=_row(card)
+	_button("I'LL BE THERE",func():
+		if Game.accept_party_invitation(id): show_page("agenda"),actions,true,"party_accept_%d"%id)
+	_button("MAYBE ANOTHER TIME",func():Game.decline_party_invitation(id),actions,false,"party_decline_%d"%id)
 
 func _introduction_card(introduction:Dictionary) -> void:
 	var card:=_card()
@@ -927,8 +985,16 @@ func _contacts_page() -> void:
 func _party_card(at_home:bool) -> void:
 	var summary:Dictionary=Game.party_summary()
 	var card:=_card()
-	card.add_child(_label("YOUR DEERFIELD GATHERING",18,AMBER))
-	if not bool(summary.get("active",false)):
+	var active:bool=bool(summary.get("active",false))
+	var visiting:bool=Game.player_location_id=="deerfield_social"
+	var player_host:bool=str(summary.get("mode","player"))=="player" or (not active and not visiting)
+	var party_location:String=str(summary.get("location_id","home"))
+	card.add_child(_label("YOUR DEERFIELD GATHERING" if player_host else str(summary.get("host_name","A friend")).to_upper()+"'S PARTY",18,AMBER))
+	if not active and visiting:
+		_paragraph("This gathering has finished. Say your goodbyes, or check your messages for another invitation.",card)
+		_button("BACK TO THE ROOM",close_page,card,true,"party_return")
+		return
+	if not active:
 		_paragraph("Host at home from 17:00 until 02:00. Supplies cost $25. Requires two contacts and reputation 5. A party lasts up to three hours, ending by 02:00.",card)
 		_paragraph("Invite your friends, let them walk over, then catch up inside. Offer a bag in person if you like — no stock is needed just to host.",card)
 		if at_home:
@@ -939,7 +1005,11 @@ func _party_card(at_home:bool) -> void:
 		return
 	var end:float=float(summary.get("ends_minute",summary.get("end_minute",Game.minute)))
 	var guests:Array=summary.get("guests",[])
-	_paragraph("HAPPENING NOW  /  Until %s\n%d / 8 invited  ·  Close your phone to let the evening unfold."%[_when(end),guests.size()],card,CREAM)
+	_paragraph("HAPPENING NOW  /  Until %s\n%s  ·  Hosted by %s"%[_when(end),Data.location_name(party_location),"you" if player_host else str(summary.get("host_name","a friend"))],card,CREAM)
+	var contacts_invited:int=int(summary.get("contact_guest_count",guests.size()))
+	var attendance:String="%d / 8 friends invited"%contacts_invited if player_host else "%d people"%guests.size()
+	if player_host and guests.size()>contacts_invited: attendance+=" + a visiting connection"
+	_paragraph(attendance+"  ·  Close your phone to let the evening unfold.",card)
 	var invited:Array[String]=[]
 	for guest:Dictionary in guests:
 		var id:String=str(guest.contact_id)
@@ -950,25 +1020,33 @@ func _party_card(at_home:bool) -> void:
 		if bool(guest.get("purchased",false)): moments.append("bought a bag")
 		if not moments.is_empty(): status+="  ·  "+", ".join(moments)
 		_paragraph("%s  /  %s"%[guest.name,status],card,CREAM)
-	if guests.is_empty(): _paragraph("The invitation list is empty. Choose a friend below.",card)
-	if bool(summary.get("can_invite",false)):
+	if guests.is_empty(): _paragraph("The invitation list is empty. Choose a friend below." if player_host else "Your host is getting ready. Guests will arrive as the evening unfolds.",card)
+	if player_host and bool(summary.get("can_invite",false)):
 		for contact:Dictionary in Game.contacts:
 			var id:String=str(contact.id)
 			if id in invited: continue
 			_button("INVITE "+str(contact.name).to_upper(),func():Game.invite_party_contact(id),card,false,"party_invite_"+id)
-	if at_home and game_root.world.current_interior=="home":
+	if game_root.world.current_interior==party_location:
 		_button("BACK TO THE PARTY",close_page,card,true,"party_return")
-	elif at_home:
-		_button("STEP INSIDE",func():game_root.enter_building("home"),card,true,"party_enter")
+	elif game_root.closest_location==party_location:
+		_button("STEP INSIDE",func():game_root.enter_building(party_location),card,true,"party_enter")
 	else:
-		_button("HEAD HOME",func():game_root.navigate("home");close_page(),card,true,"party_directions")
+		_button("HEAD HOME" if player_host else "DIRECTIONS TO THE PARTY",func():game_root.navigate(party_location);close_page(),card,true,"party_directions")
 
 func _agenda_page() -> void:
 	_heading("Today, on your terms","Class is your one fixed commitment. Everything else is a choice.")
 	var class_card:=_card()
 	class_card.add_child(_label("DAILY  /  CAMPUS CLASS",14,LIME))
-	_paragraph("Next class: day %d, %s–10:00. Press E at the classroom entrance; class advances the clock. Missed classes: %d / 3."%[int(Game.next_class_minute()/1440)+1,Game.format_minute(Game.next_class_minute()),Game.missed_classes],class_card,CREAM)
+	var next_class:Dictionary=Game.class_schedule(int(Game.next_class_minute()/1440.0)+1)
+	_paragraph("Day %d  /  Class at %s\nArrive by %s. Class finishes at %s. Press %s at the classroom entrance; class advances the clock. Missed classes: %d / 3."%[int(next_class.day),Game.format_minute(float(next_class.start_minute)),Game.format_minute(float(next_class.latest_arrival_minute)),Game.format_minute(float(next_class.end_minute)),"A" if controller_active else "E",Game.missed_classes],class_card,CREAM)
 	_button("DIRECTIONS TO CLASS",func():game_root.navigate("classroom");close_page(),class_card)
+	for invitation:Dictionary in Game.party_invitations():
+		if str(invitation.status) not in ["accepted","active"]: continue
+		var party:=_card()
+		party.add_child(_label(str(invitation.host_name).to_upper()+"'S PARTY",20,AMBER))
+		_paragraph("%s until %s\n%s  ·  %s"%[_when(float(invitation.start_minute)),Game.format_minute(float(invitation.end_minute)),Data.location_name(str(invitation.location_id)),"Happening now" if str(invitation.status)=="active" else "You're on the guest list"],party,CREAM)
+		var party_location:String=str(invitation.location_id)
+		_button("DIRECTIONS TO THE PARTY",func():game_root.navigate(party_location);close_page(),party,true,"party_agenda_%d"%int(invitation.id))
 	for meeting in Game.active_meetings():
 		var card:=_card()
 		card.add_child(_label("%s   /   %s"%[_when(float(meeting.due_minute)),str(meeting.contact_name).to_upper()],20,AMBER))
@@ -994,19 +1072,45 @@ func _agenda_page() -> void:
 
 func _suppliers_page() -> void:
 	_heading("The next connection","Pickups run nightly, 22:00–02:00. Arrange a slot, bring the cash, and meet in person.")
-	_paragraph("Next available pickup: %s. Larger connections carry larger risks."%_when(Game.next_supplier_minute()),body,AMBER)
+	var catalog:Array=Game.supplier_catalog()
+	var any_available:bool=false
+	var next_pickup:float=INF
+	for entry:Dictionary in catalog:
+		if bool(entry.can_order):
+			any_available=true
+			next_pickup=minf(next_pickup,float(entry.next_pickup_minute))
+	_paragraph("Next available pickup: %s. Leave two days between new orders with the same supplier."%_when(next_pickup) if any_available else "Your next order times are shown below. Each supplier needs two days between new orders.",body,AMBER)
 	var previous_order:Button=null
-	for supplier in Game.supplier_catalog():
+	for supplier in catalog:
 		var card:=_card()
 		card.add_child(_label(str(supplier.name).to_upper(),23,LIME))
-		_paragraph("%s  ·  Requires %d reputation"%[supplier.title,supplier.reputation_required],card)
+		var unlocked:bool=bool(supplier.unlocked)
+		var description:String="%s  ·  %s"%[supplier.title,"Pickup: "+Data.location_name(str(supplier.location_id)) if unlocked else "Connection not yet made"]
+		if bool(supplier.can_order): description+="\nNext pickup: "+_when(float(supplier.next_pickup_minute))
+		_paragraph(description,card)
+		var details:String=str(supplier.discovery_hint)
+		var available_at:float=float(supplier.next_available_minute)
+		if unlocked and available_at>Game.minute:
+			details="RESTOCKING  /  Next order %s\nNext possible pickup %s. Two days must pass after your last new order with this supplier."%[_when(available_at),_when(float(supplier.next_pickup_minute))]
+		if not unlocked or available_at>Game.minute:
+			_paragraph(details,card,AMBER)
+		elif int(supplier.tier)==1 and int(supplier.successful_meetings)<3:
+			_paragraph("%d / 3 completed pickups toward a personal introduction."%int(supplier.successful_meetings),card,MUTED)
 		_paragraph("$%d / bundle  ·  %d%% quality  ·  %d%% bust risk\nOne bundle packs into six bags."%[supplier.bundle_price,int(supplier.quality*100),int(supplier.risk*100)],card,CREAM)
 		var tier:int=supplier.tier
-		var unlocked:bool=Game.reputation>=supplier.reputation_required
-		card.add_child(_label("CHOOSE YOUR BUNDLES",12,LIME if unlocked else MUTED))
+		var can_order:bool=bool(supplier.can_order)
+		if not can_order:
+			var hint:=_button("READ CONNECTION DETAILS",func():show_toast(details),card,false,"supplier_%d_details"%tier)
+			if is_instance_valid(previous_order):
+				previous_order.focus_neighbor_bottom=previous_order.get_path_to(hint)
+				previous_order.focus_next=previous_order.get_path_to(hint)
+				hint.focus_neighbor_top=hint.get_path_to(previous_order)
+			previous_order=hint
+			continue
+		card.add_child(_label("CHOOSE YOUR BUNDLES",12,LIME))
 		var quantity:=BundleStepper.new()
 		card.add_child(quantity)
-		quantity.setup(int(supplier_quantities.get(tier,1)),int(supplier.max_bundles),unlocked,"supplier_%d_quantity"%tier)
+		quantity.setup(int(supplier_quantities.get(tier,1)),int(supplier.max_bundles),can_order,"supplier_%d_quantity"%tier)
 		var price:float=float(supplier.bundle_price)
 		var total:=_paragraph("$%s total  ·  %d packed bags"%[_money(price*quantity.value),quantity.value*6],card,CREAM)
 		quantity.value_changed.connect(func(value:int):
@@ -1015,10 +1119,9 @@ func _suppliers_page() -> void:
 		_paragraph("Left / Right: quantity     Down: arrange pickup",card)
 		var b:=_button("ARRANGE PICKUP",func():
 			if Game.supplier_order(tier,int(quantity.value)):
-				show_page("agenda"),card,unlocked,"supplier_%d_order"%tier)
-		b.disabled=not unlocked
+				show_page("agenda"),card,true,"supplier_%d_order"%tier)
 		quantity.connect_continue(b)
-		if unlocked:
+		if can_order:
 			if is_instance_valid(previous_order):
 				previous_order.focus_neighbor_bottom=previous_order.get_path_to(quantity.choice)
 				previous_order.focus_next=previous_order.get_path_to(quantity.choice)
@@ -1130,6 +1233,11 @@ func _shop_page() -> void:
 		_button("STEP INSIDE",func():game_root.enter_building(location))
 
 func _home_page() -> void:
+	if Game.player_location_id=="deerfield_social":
+		var party:Dictionary=Game.party_summary()
+		_heading(str(party.get("host_name","A friend"))+"'s place","You're a guest tonight. Find your friends, catch up, and make a new connection.")
+		_party_card(false)
+		return
 	_heading("Your place on Deerfield","A small apartment. A little breathing room. Tomorrow is another chance.")
 	if game_root.world.current_interior=="":
 		_button("ENTER APARTMENT",func():game_root.enter_building("home"),body,true)
@@ -1141,7 +1249,8 @@ func _home_page() -> void:
 func _campus_page() -> void:
 	_heading("Campus life","The life you're trying to keep. A daily class and honest work when you need it.")
 	var class_card:=_card()
-	_paragraph("Arrive from 08:40 until 10:00. Class finishes at 11:00. Three missed classes ends your scholarship and your run.",class_card,CREAM)
+	var next_class:Dictionary=Game.class_schedule(int(Game.next_class_minute()/1440.0)+1)
+	_paragraph("Next class: day %d at %s. Arrive from %s until %s; class finishes at %s. Check your agenda each day — some classes are in the afternoon. Three missed classes ends your scholarship and your run."%[int(next_class.day),Game.format_minute(float(next_class.start_minute)),Game.format_minute(float(next_class.start_minute)-20.0),Game.format_minute(float(next_class.latest_arrival_minute)),Game.format_minute(float(next_class.end_minute))],class_card,CREAM)
 	_button("ATTEND CLASS",func():
 		if Game.attend_class():
 			close_page();transition(),class_card,true)
@@ -1175,9 +1284,9 @@ func _help_page() -> void:
 	_paragraph("CONNECTIONS: Talk to people in the city, check in with saved contacts, and decide which introductions to trust. Questions and what you know about a friend can help you judge a new number. You can ask new requests to text tomorrow. At an in-person meetup, E opens the choice to complete the handoff or discuss postponing.")
 	_paragraph("Mouse wheel changes camera distance. Click map landmarks for directions. Menus pause the clock. Close a menu with its Close button, Escape, or the same shortcut.")
 	_paragraph("MEETINGS: Pack stock in your backpack, answer a text, choose a place/time/price, follow the map, and press E to hand off. If early, Agenda can skip ahead to 30 minutes before the meeting. Close your phone and watch your contact walk over; they aim to arrive 12 minutes early. The clock pauses in menus.")
-	_paragraph("SURVIVAL: Eat sandwiches, attend class daily between 09:00 and 10:00, and sleep at home. Three missed classes means eviction. Campus shifts can help recover seed money.")
+	_paragraph("SURVIVAL: Eat sandwiches, attend your daily class at the time shown in Agenda, and sleep at home. Some classes are in the afternoon. Three missed classes means eviction. Campus shifts can help recover seed money.")
 	_paragraph("POLICE: Visible crimes and identified stolen cars trigger pursuit. Break line of sight for %d seconds to escape at your current notoriety. Repeated incidents make escapes longer and draw more patrol attention to that location. A patrol close enough for 2.3 seconds arrests you and ends the run."%int(Game.escape_duration_seconds()))
-	_paragraph("PROGRESSION: On-time sales and good value grow relationships. Contacts introduce friends. Reputation unlocks better suppliers and a car. Pay tuition from the phone to win.")
+	_paragraph("PROGRESSION: On-time sales and good value grow relationships. Meet Sable at a party or after hours; reliable pickups earn a personal introduction to the next supplier. Each supplier needs two days between new orders. Reputation helps you buy a car. Pay tuition from the phone to win.")
 	if game_root.closest_location in ["campus_quad","classroom"]:
 		_button("WORK CAMPUS SHIFT  /  $35 · 2 HOURS",func():Game.work_shift();close_page())
 

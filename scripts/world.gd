@@ -34,6 +34,8 @@ var parked_car_spawns: Array[Dictionary] = []
 var parking_lots: Array[Dictionary] = []
 var parking_slots: Array[Dictionary] = []
 var outskirts_routes: Array[PackedVector3Array] = []
+var pedestrian_activities: Dictionary = {}
+var pedestrian_itineraries: Array[Array] = []
 var crosswalks: Array[Dictionary] = []
 var public_props: Array[Dictionary] = []
 var _path_corridors: Array[Dictionary] = []
@@ -72,6 +74,7 @@ func _ready() -> void:
 	_create_park()
 	_create_streetscape()
 	_create_routes()
+	_create_pedestrian_activities()
 	_create_interiors()
 	_bind_building_entrances()
 	_connect_parking_lots()
@@ -98,6 +101,10 @@ func _create_landmarks() -> void:
 	_landmark("skate_park", "Deerfield skate spot", 116, 8, "meet", "Deerfield")
 	_landmark("bus_stop", "Baseline transit", -30, -82, "meet", "College Square")
 	_landmark("residence", "Student residence", 76, 53, "meet", "Campus")
+	_landmark("west_overlook", "West trail overlook", -128, 63, "meet", "Campus")
+	_landmark("service_lane", "Freight lane", -113, 98, "meet", "College Square")
+	_landmark("east_trail", "East trail shelter", 128, -106, "meet", "Deerfield")
+	_landmark("deerfield_social", "Deerfield neighbors", 86, -51, "social", "Deerfield", "deerfield_social")
 
 func _bind_building_entrances() -> void:
 	# Authored against native GLB doors, not a universal assumption that +Z is
@@ -110,7 +117,8 @@ func _bind_building_entrances() -> void:
 		"home":[Vector3(90.3,0,-62.8),Vector3.BACK,"Suburban_City/building-type-n"],
 		"auto_dealer":[Vector3(-115.7,0,-16),Vector3.LEFT,"Commercial_City/building-b"],
 		"supplier":[Vector3(-85.5,0,92.2),Vector3.BACK,"Industrial_City/building-g"],
-		"residence":[Vector3(76,0,47.2),Vector3.BACK,"Commercial_City/building-e"]
+		"residence":[Vector3(76,0,47.2),Vector3.BACK,"Commercial_City/building-e"],
+		"deerfield_social":[Vector3(86,0,-47.1),Vector3.FORWARD,"Suburban_City/building-type-e"]
 	}
 	for id: String in entries:
 		var data: Array = entries[id]
@@ -120,6 +128,21 @@ func _bind_building_entrances() -> void:
 		_path([Vector2(door.x,door.z),Vector2(marker.x,marker.z)],2.4)
 	_path([Vector2(-119,-16),Vector2(-128,-16)],2.4)
 	_path([Vector2(-85.5,96),Vector2(-96,96),Vector2(-96,80)],2.4)
+	_path([Vector2(86,-51),Vector2(86,-57)],2.4)
+	_path([Vector2(-128,63),Vector2(-122,63),Vector2(-118,60)],2.4)
+	_path([Vector2(-113,98),Vector2(-105,98),Vector2(-101,95)],2.4)
+	_path([Vector2(128,-106),Vector2(134,-108)],2.4)
+	for at: Vector3 in [Vector3(-128,0,63),Vector3(-113,0,98),Vector3(128,0,-106)]:
+		_batch.box(at+Vector3.UP*0.03,Vector3(6,0.06,5),WALK)
+		_asset("Furniture/bench",at+Vector3(-3.7,0,0),Vector3(2.4,1.0,0.8),PI/2)
+	_sign("WEST TRAIL",Vector3(-125,0,66),CAMPUS)
+	_sign("FREIGHT LANE",Vector3(-111,0,102),SHOP)
+	_sign("EAST TRAIL",Vector3(125,0,-102),HOME)
+	# A small trail shelter echoes the existing transit shelter without occupying
+	# the rendezvous circle or the carriageway beside it.
+	_batch.box(Vector3(124.2,2.75,-106),Vector3(4.8,0.18,2.4),INK)
+	for x: float in [122.0,126.4]:
+		_batch.box(Vector3(x,1.3,-106.9),Vector3(0.14,2.6,0.14),INK)
 
 func _landmark(id: String, title: String, x: float, z: float, kind: String, district: String, interior_id: String = "") -> void:
 	landmarks[id] = {"name": title, "position": Vector3(x, 0.17, z), "type": kind, "district": district, "interior": interior_id}
@@ -368,7 +391,10 @@ func _create_commercial() -> void:
 	_asset("Industrial_City/shipping-container-a",Vector3(-98.5,0,75),Vector3(3.0,3.0,6.3))
 	_asset("Roads/dumpster",Vector3(-80,0,77),Vector3(2.4,1.8,1.4))
 	_asset("Blasters/crate-medium",Vector3(-97,0,80),Vector3(1.3,1.1,1.0))
-	_path([Vector2(-96,70),Vector2(-107,65),Vector2(-107,47),Vector2(-104,45),Vector2(-84,45)],2.4)
+	# A continuous perimeter footpath connects the service yard to campus.
+	# The former branch stopped in the middle of the vehicle aisle.
+	_path([Vector2(-108,64),Vector2(-108,29),Vector2(-81,29),Vector2(-72,38),Vector2(-63,43),Vector2(-52,44)],2.4)
+	_crosswalk(Vector3(-69,0,41),0.0,6.5)
 	# Outdoor café terrace and familiar social meeting corner.
 	_batch.box(Vector3(-56,0.035,-18),Vector3(17,0.07,9),Color("a49c88"))
 	for x in [-62,-56,-50]:
@@ -526,7 +552,7 @@ func _create_routes() -> void:
 	traffic_routes.append(_lane_route([Vector2(18,-43),Vector2(28,-13),Vector2(42,23),Vector2(57,53),Vector2(74,87),Vector2(49,96),Vector2(-17,108),Vector2(-35,111),Vector2(-48,72),Vector2(-64,48),Vector2(-83,23),Vector2(-59,18),Vector2(-43,1),Vector2(-33,-22),Vector2(-10,-39)],1.4))
 	# Added loops serve the west edge and outer blocks without redistributing the
 	# original fourteen groups already walking the five established routes.
-	outskirts_routes.append(_points([Vector2(-112,26),Vector2(-108,56),Vector2(-88,63),Vector2(-68,57),Vector2(-74,34),Vector2(-94,30)]))
+	outskirts_routes.append(_points([Vector2(-112,32),Vector2(-118,52),Vector2(-128,63),Vector2(-108,56),Vector2(-88,63),Vector2(-68,57),Vector2(-74,34),Vector2(-94,30)]))
 	outskirts_routes.append(_points([Vector2(-128,-44),Vector2(-120,-59),Vector2(-103,-67),Vector2(-80,-77),Vector2(-54,-88),Vector2(-43,-82),Vector2(-54,-75),Vector2(-78,-64),Vector2(-110,-52)]))
 	outskirts_routes.append(_points([Vector2(-114,68),Vector2(-102,91),Vector2(-90,108),Vector2(-58,105),Vector2(-45,95),Vector2(-50,82),Vector2(-57,74),Vector2(-96,72)]))
 	outskirts_routes.append(_points([Vector2(116,63),Vector2(126,57),Vector2(133,42),Vector2(134,5),Vector2(126,-13),Vector2(124,9),Vector2(124,29),Vector2(121,53)]))
@@ -535,11 +561,61 @@ func _create_routes() -> void:
 	campus_police_routes.append(pedestrian_routes[3])
 	campus_police_routes.append(pedestrian_routes[4])
 	city_police_routes.append(pedestrian_routes[1])
-	city_police_routes.append(pedestrian_routes[2])
+	city_police_routes.append(_points([Vector2(77,-59),Vector2(77,-78),Vector2(98,-81),Vector2(115,-88),Vector2(128,-106),Vector2(131,-91),Vector2(128,-61),Vector2(116,-30),Vector2(97,-31),Vector2(98,-56),Vector2(108,-54),Vector2(94,-54),Vector2(80,-54)]))
 	campus_police_routes.append(outskirts_routes[0])
 	campus_police_routes.append(outskirts_routes[3])
 	city_police_routes.append(outskirts_routes[1])
 	city_police_routes.append(outskirts_routes[4])
+	city_police_routes.append(_points([Vector2(-86,96),Vector2(-101,96),Vector2(-113,98),Vector2(-114,81),Vector2(-102,73),Vector2(-96,78)]))
+
+func _create_pedestrian_activities() -> void:
+	# Named destinations give walking a purpose. Local itineraries keep each
+	# neighborhood populated; visits dwell rather than orbiting a nearby prop.
+	var entries := {
+		"classroom":[get_landmark("classroom"),"Heading to class","Waiting for class","study"],
+		"library":[get_landmark("library"),"Walking to the library","Reading at the library","study"],
+		"campus_quad":[Vector3(24,0.2,50),"Meeting friends at the quad","Catching up at the quad","social"],
+		"sculpture":[Vector3(8,0.2,69),"Taking a study break","Taking a quiet break","rest"],
+		"market":[get_landmark("market"),"Picking up groceries","Shopping for groceries","shop"],
+		"cafe":[get_landmark("cafe"),"Lunch at College Square","Waiting for takeout","food"],
+		"motors":[get_landmark("auto_dealer"),"Browsing used cars","Looking at used cars","shop"],
+		"square_corner":[Vector3(-52,0.2,-34),"Meeting a friend after work","Waiting for a friend","social"],
+		"home":[get_landmark("home"),"Heading home","Taking a break at home","home"],
+		"neighbors":[get_landmark("deerfield_social"),"Visiting a neighbor","Visiting friends","social"],
+		"courtyard":[Vector3(78,0.2,-76),"Walking to the courtyard","Relaxing in the courtyard","rest"],
+		"north_corner":[Vector3(97,0.2,-85),"Walking through Deerfield","Waiting for a ride","home"],
+		"residence":[get_landmark("residence"),"Study group at the residence","Catching up outside residence","social"],
+		"athletics":[Vector3(97,0.2,30),"Heading to athletics","Taking a break after practice","rest"],
+		"skate_park":[get_landmark("skate_park"),"Walking to the skate spot","Watching the skaters","social"],
+		"east_green":[Vector3(124,0.2,60),"Walking along east campus","Enjoying the campus lawn","rest"],
+		"car_park":[Vector3(-83,0.2,60),"Walking to west parking","Waiting for a ride at west parking","home"],
+		"workshop":[Vector3(-48,0.2,48),"Heading to the workshop","Waiting outside the workshop","study"],
+		"west_lawn":[Vector3(-35,0.2,66),"Meeting classmates outside","Talking with classmates","social"],
+		"west_overlook":[get_landmark("west_overlook"),"Walking to the west trail","Taking a break at the overlook","rest"],
+		"west_corner":[Vector3(-110,0.2,32),"Walking along west campus","Waiting at the campus edge","social"],
+		"bus_stop":[get_landmark("bus_stop"),"Walking to Baseline transit","Waiting for the bus","home"],
+		"north_transit":[Vector3(-124,0.2,-56),"Heading to the north corner","Waiting for a lift","home"],
+		"service_lane":[get_landmark("service_lane"),"Walking toward Freight lane","Taking a break off the main road","rest"],
+		"supplier":[get_landmark("supplier"),"Heading to the service yard","Finishing a shift at the yard","shop"],
+		"south_green":[Vector3(-52,0.2,101),"Walking along south campus","Relaxing at the south lawn","rest"],
+		"innovation":[Vector3(-69,0.2,99),"Heading to the innovation lab","Waiting outside the lab","study"],
+		"east_trail":[get_landmark("east_trail"),"Walking to the east trail","Resting at the trail shelter","rest"]
+	}
+	for id: String in entries:
+		var entry: Array = entries[id]
+		pedestrian_activities[id] = {"position":entry[0],"travel":entry[1],"stay":entry[2],"kind":entry[3]}
+	pedestrian_itineraries.assign([
+		["classroom","library","campus_quad","sculpture"],
+		["market","cafe","motors","square_corner"],
+		["home","neighbors","courtyard","north_corner"],
+		["residence","athletics","skate_park","east_green"],
+		["car_park","workshop","west_lawn","library"],
+		["west_overlook","car_park","west_corner","workshop"],
+		["market","cafe","north_transit","bus_stop"],
+		["service_lane","supplier","south_green","innovation"],
+		["east_green","athletics","skate_park","residence"],
+		["east_trail","north_corner","neighbors","courtyard"]
+	])
 
 func _lane_route(points: Array, lane_offset: float) -> PackedVector3Array:
 	var center := _points(points)
@@ -870,7 +946,7 @@ func _collision(parent: Node3D, position: Vector3, size: Vector3) -> StaticBody3
 func _create_interiors() -> void:
 	# Each room is an open-top dollhouse, with furniture from the original packs.
 	# Independent offsets ensure collision is harmless while a room is hidden.
-	var ids := ["home","market","cafe","classroom","library"]
+	var ids := ["home","market","cafe","classroom","library","deerfield_social"]
 	for i in ids.size():
 		var room := Node3D.new()
 		room.name = "Interior_"+ids[i]
@@ -920,7 +996,7 @@ func _furnish_room(room: Node3D, id: String) -> void:
 	title.outline_size = 0
 	room.add_child(title)
 	match id:
-		"home":
+		"home", "deerfield_social":
 			_room_box(room,Vector3(-6.5,1.8,-7.8),Vector3(3.8,1.8,0.12),Color("688b93"))
 			_room_box(room,Vector3(-6.5,1.8,-7.7),Vector3(0.12,1.8,0.13),Color("e0d8c4"))
 			_room_box(room,Vector3(-6.5,1.8,-7.7),Vector3(3.8,0.12,0.13),Color("e0d8c4"))

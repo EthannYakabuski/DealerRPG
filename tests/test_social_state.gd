@@ -188,12 +188,12 @@ func _test_night_suppliers() -> void:
 	var supplier: Dictionary
 	for meeting: Dictionary in game.active_meetings():
 		if meeting["type"] == "supplier": supplier = meeting
-	_check(supplier["due_minute"] == 1355.0, "night pickup leaves thirty-five minutes after an existing appointment")
+	_check(supplier["due_minute"] == 1350.0, "night pickup leaves thirty minutes after an existing appointment")
 	_fresh()
 	game.cash = 1000.0
 	game.supplier_order(0,1)
 	supplier = game.active_meetings()[0]
-	game.player_location_id = "car_park"
+	game.player_location_id = str(supplier["location_id"])
 	game.advance_time(float(supplier["due_minute"])-12.0-game.minute)
 	_check(not game.complete_meeting(int(supplier["id"])) and game.cash == 1000.0, "early actor arrival does not permit a supplier sale before22:00")
 	game.advance_time(12.0)
@@ -256,7 +256,7 @@ func _test_callbacks() -> void:
 	game.supplier_order(0,1)
 	meeting = game.active_meetings()[0]
 	game.advance_time(60.0)
-	game.player_location_id = "car_park"
+	game.player_location_id = str(meeting["location_id"])
 	_check(game.postpone_meeting(int(meeting["id"])) and game.callbacks[0]["due_minute"] == 2760.0, "late supplier postponement waits for the next night window")
 	_check(not game.supplier_order(0,1), "pending supplier callback prevents duplicate simultaneous orders")
 	game.save_game()

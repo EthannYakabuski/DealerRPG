@@ -11,6 +11,10 @@ var game: Node
 var crimes := 0
 var civilian_reports := 0
 
+class SocialActorOwner extends Node:
+	var contacts: Array[String] = ["milo","supplier_1"]
+	func has_contact_actor(contact_id: String) -> bool: return contacts.has(contact_id)
+
 func _initialize() -> void:
 	call_deferred("_run")
 
@@ -35,6 +39,9 @@ func _run() -> void:
 	player.attacked.connect(population.attack)
 	await physics_frame
 	await _test_world_population()
+	await _test_patrol_navigation()
+	await _test_activity_routines()
+	await _test_remote_landmarks()
 	await _test_police()
 	await _test_player()
 	await _test_surface_traversal()
@@ -43,6 +50,7 @@ func _run() -> void:
 	await _test_traffic_impacts()
 	await _test_civilian_reports()
 	await _test_meetings()
+	await _test_party_meeting_identity()
 	await _test_dynamic_simulation()
 	await _test_traffic_endurance()
 	await _test_commuter_trips()
@@ -66,7 +74,11 @@ func _setup_inputs() -> void:
 		if not InputMap.has_action(action): InputMap.add_action(action)
 
 func _test_world_population() -> void:
-	_check(population.citizens.size()==57,"world retains fourteen central groups and adds five outskirts groups")
+	_check(population.citizens.size()==57,"world preserves all 42 central pedestrians and fifteen outskirts pedestrians")
+	var solos := 0
+	for citizen: Dictionary in population.citizens:
+		if citizen.solo: solos += 1
+	_check(solos==36,"most citizens travel alone while seven friend groups remain")
 	_check(population.police.size()==10,"campus, city, and outskirts patrols spawn")
 	_check(population.vehicles.size()==12+world.parked_car_spawns.size(),"all world parking stall positions are populated")
 	var group: Dictionary = population.citizens[0]
@@ -116,6 +128,114 @@ func _reset_crime() -> void:
 		officer.stun = 0.0
 		officer.node.position = Vector3(135.0,0.2,110.0)
 	for citizen: Dictionary in population.citizens: citizen.panic = 0.0
+
+func _test_patrol_navigation() -> void:
+	# Regression for the west parking officer: its old route aimed at z26,
+	# outside campus, and the jurisdiction guard stranded it forever at z28.
+	var officer: Dictionary = population.police[7]
+	officer.neighbors = []
+	var waypoint_changes := 0
+	var legal := true
+	var moving := true
+	var window_start: Vector3 = officer.node.position
+	for tick in 15000:
+		var target: Vector3 = officer.route[int(officer.index)]
+		if population._horizontal_distance(officer.node.position,target)<1.3:
+			officer.index = (int(officer.index)+1)%officer.route.size()
+			waypoint_changes += 1
+		population._move_person(officer,target,1.8,1.0/60.0)
+		if not population._is_campus(officer.node.position): legal = false
+		if tick>0 and tick%600==0:
+			if population._horizontal_distance(officer.node.position,window_start)<0.5: moving = false
+			window_start = officer.node.position
+			await physics_frame
+	_check(waypoint_changes>=officer.route.size()*2,"west parking officer completes two full patrol loops")
+	_check(legal and moving,"west patrol keeps moving inside campus instead of freezing at its boundary")
+	# A legacy save can place a city officer north of the detached freight block.
+	# Transit is allowed, although witnessing and arrest still enforce jurisdiction.
+	var city_officer: Dictionary = population.police[6]
+	city_officer.node.position = Vector3(-102,0.2,64)
+	city_officer.nav_path = PackedVector3Array()
+	city_officer.nav_index = 0
+	city_officer.nav_target = Vector3.INF
+	city_officer.neighbors = []
+	var freight: Vector3 = world.get_landmark("service_lane")
+	for tick in 2400:
+		population._move_person(city_officer,freight,1.8,1.0/60.0)
+		if tick%120==0: await physics_frame
+		if population._horizontal_distance(city_officer.node.position,freight)<1.0: break
+	_check(population._horizontal_distance(city_officer.node.position,freight)<1.0,"city patrol can reach the detached freight block from an old saved patrol position")
+	for index: int in [5,6]:
+		var patrol: Dictionary = population.police[index]
+		patrol.neighbors = []
+		var completed := 0
+		for tick in 18000:
+			var target: Vector3 = patrol.route[int(patrol.index)]
+			if population._horizontal_distance(patrol.node.position,target)<1.3:
+				patrol.index = (int(patrol.index)+1)%patrol.route.size()
+				completed += 1
+			population._move_person(patrol,target,1.8,1.0/60.0)
+			if tick%600==0: await physics_frame
+			if completed>patrol.route.size(): break
+		_check(completed>patrol.route.size(),"new outskirts patrol physically completes its full route: officer %d"%index)
+
+func _test_activity_routines() -> void:
+	game.restart_game()
+	game.set_process(false)
+	population._update_citizen_schedule()
+	var activities: Dictionary = {}
+	var local := true
+	for citizen: Dictionary in population.citizens:
+		activities[citizen.activity_id] = true
+		if not world.pedestrian_itineraries[int(citizen.routine_zone)].has(citizen.activity_id): local = false
+	_check(activities.size()>=12 and local,"simultaneous pedestrians have varied meaningful destinations within their own neighborhoods")
+	_check(population.citizens[0].activity_id==population.citizens[1].activity_id,"friends agree on the same destination instead of independent circling")
+	var citizen: Dictionary = population.citizens[3]
+	citizen.neighbors = []
+	var first_id: String = citizen.activity_id
+	var original: Vector3 = citizen.node.position
+	for tick in 7200:
+		player.position = citizen.node.position+Vector3(0,0,8)
+		population._update_citizen(citizen,1.0/60.0,false)
+		if tick%120==0: await physics_frame
+		if citizen.activity_arrived: break
+	_check(citizen.activity_arrived and original.distance_to(citizen.node.position)>5.0,"a solo pedestrian physically reaches its named destination")
+	_check(citizen.goal==world.pedestrian_activities[first_id].stay,"arrival changes the pedestrian's conversational goal to its actual activity")
+	var arrived_at: Vector3 = citizen.node.position
+	for tick in 900:
+		population._update_activity_plans(1.0/60.0)
+		population._update_citizen(citizen,1.0/60.0,false)
+	_check(citizen.activity_id==first_id and citizen.node.position.distance_to(arrived_at)<0.1,"a visit lasts at least fifteen real seconds without orbiting nearby props")
+	for tick in 3000:
+		population._update_activity_plans(1.0/60.0)
+		if citizen.activity_id!=first_id: break
+	_check(citizen.activity_id!=first_id and not citizen.activity_arrived,"finishing a visit selects another destination")
+	var second_id: String = citizen.activity_id
+	population._choose_activity(int(citizen.group))
+	_check(citizen.activity_id!=first_id and citizen.activity_id!=second_id,"the next outing avoids immediately repeating either of its last two destinations")
+	game.minute = 1240.0
+	population._update_citizen_schedule()
+	var evening_appropriate := true
+	for pedestrian: Dictionary in population.citizens:
+		if world.pedestrian_activities[pedestrian.activity_id].kind=="study": evening_appropriate = false
+	_check(evening_appropriate,"evening plans prefer social stops and rest instead of classes")
+
+func _test_remote_landmarks() -> void:
+	var walker: Dictionary = population.citizens[56]
+	walker.neighbors = []
+	var starts := {"west_overlook":Vector3(-106,0.2,45),"service_lane":Vector3(-98,0.2,75),"east_trail":Vector3(118,0.2,-86),"deerfield_social":Vector3(78,0.2,-60)}
+	for id: String in starts:
+		walker.node.position = starts[id]
+		walker.nav_path = PackedVector3Array()
+		walker.nav_index = 0
+		walker.nav_target = Vector3.INF
+		var target: Vector3 = world.get_landmark(id)
+		await physics_frame
+		for tick in 2400:
+			population._move_person(walker,target,2.8,1.0/60.0)
+			if tick%120==0: await physics_frame
+			if population._horizontal_distance(walker.node.position,target)<1.0: break
+		_check(population._horizontal_distance(walker.node.position,target)<1.0,"an actual capsule reaches the new rendezvous/door: "+id)
 
 func _test_police() -> void:
 	_reset_crime()
@@ -398,6 +518,47 @@ func _test_world_state_save() -> void:
 	population.restore_pursuit_state(game.world_state.pursuit_state)
 	_check(population.police[0].node.position.distance_to(Vector3(24,0.2,50))<0.01 and is_equal_approx(population.arrest_seconds,2.1),"reload preserves nearby patrol and arrest progress instead of granting a fresh escape")
 
+func _test_party_meeting_identity() -> void:
+	game.restart_game()
+	game.set_process(false)
+	population.reset_population()
+	population.set_physics_process(false)
+	player.position = world.get_landmark("home")
+	var now: float = game.minute
+	game.meetings.assign([
+		{"id":880,"type":"client","contact_id":"milo","contact_name":"Milo","location_id":"home","due_minute":now+45.0,"status":"scheduled"},
+		{"id":881,"type":"supplier","contact_id":"supplier_1","contact_name":"Sable","location_id":"service_lane","due_minute":now+45.0,"status":"scheduled"}
+	])
+	game.active_party = {"id":879,"start_minute":now-10.0,"end_minute":now+30.0,"status":"active","guests":[{"contact_id":"milo"},{"contact_id":"supplier_1","supplier":true}]}
+	population._sync_meetings()
+	_check(population.meeting_actors.is_empty() and population.meeting_walks.is_empty(),"party guests do not also appear as client or supplier appointment actors")
+	_check(game.meetings[0].status=="scheduled" and game.meetings[1].status=="scheduled","party identity suppression keeps the agreed appointments intact")
+	population._sync_meetings()
+	_check(population.meeting_actors.is_empty(),"repeated sync cannot respawn a duplicate while the same person is attending a party")
+	var owner := SocialActorOwner.new()
+	scene.add_child(owner)
+	population.social_actor_providers.append(owner)
+	game.minute = now+31.0
+	population._sync_meetings()
+	_check(population.meeting_actors.is_empty(),"social helpers retain identity while party or supplier actors are still walking away")
+	owner.contacts.clear()
+	population._sync_meetings()
+	_check(population.meeting_actors.size()==2,"both guests can begin their appointment approach after their physical departure")
+	_check(population.meeting_actors["881"].get_meta("asset")=="character-female-f","Sable keeps the same model in party, encounter and supplier meeting")
+	var before: Vector3 = population.meeting_actors["880"].position
+	for tick in 120:
+		population._update_meeting_walks(1.0/60.0,false)
+		if tick%30==0: await physics_frame
+	_check(population.meeting_walks["880"].state=="approaching" and population.meeting_actors["880"].position.distance_to(before)>1.0,"released client walks toward the rendezvous rather than appearing at its target")
+	var existing: Node3D = population.meeting_actors["880"]
+	owner.contacts.append("milo")
+	population._sync_meetings()
+	_check(population.meeting_actors["880"]==existing,"ownership checks never delete or teleport an already-existing meeting actor")
+	population.social_actor_providers.clear()
+	owner.queue_free()
+	game.restart_game()
+	await process_frame
+
 func _test_dynamic_simulation() -> void:
 	game.restart_game()
 	population.reset_population()
@@ -610,6 +771,7 @@ func _test_commuter_trips() -> void:
 	var entered := false
 	var drove := false
 	var clear_walls := true
+	var first_return: Dictionary = {}
 	for tick in range(16000):
 		var before: Vector3 = walker.node.position
 		manager.update(1.0/60.0)
@@ -625,15 +787,19 @@ func _test_commuter_trips() -> void:
 			for rect: Rect2 in world.obstacle_rects:
 				if rect.grow(0.7).has_point(Vector2(car.node.position.x,car.node.position.z)): clear_walls = false
 		if tick%600==0: await physics_frame
-		if manager.completed_trips>=3: break
+		if first_return.is_empty() and not manager.trips.has(first):
+			# Another citizen may legitimately reuse this parked car before the
+			# third trip ends. Check its first physical return at that moment.
+			var bay_clear := true
+			for other: Dictionary in population.vehicles:
+				if other.node!=car.node and car.node.position.distance_to(other.node.position)<2.8: bay_clear = false
+			first_return = {"parked":car.parked and not car.npc_driver,"moved_bay":car.node.position.distance_to(start)>3.0,"exited":walker.car_trip=="" and walker.node.position.distance_to(car.node.position)<4.0,"clear":bay_clear}
+		if manager.completed_trips>=3 and not manager.trips.has(first): break
 	_check(entered and max_step<0.12 and original_walker.distance_to(start)>2.0,"commuter physically walks to its door before entering without teleporting across the lot")
 	_check(drove and clear_walls and manager.completed_trips>=3,"three commuter cars merge into existing roads, complete their routes and return without crossing buildings")
-	_check(car.parked and not car.npc_driver and car.node.position.distance_to(start)>3.0,"completed trip parks in a different vacant bay")
-	_check(walker.car_trip=="" and walker.node.position.distance_to(car.node.position)<4.0,"parked commuter exits the actual vehicle and resumes walking")
-	var slots_clear := true
-	for other: Dictionary in population.vehicles:
-		if other.node!=car.node and car.node.position.distance_to(other.node.position)<2.8: slots_clear = false
-	_check(slots_clear,"returned commuter occupies a clear bay without overlapping another car")
+	_check(first_return.get("parked",false) and first_return.get("moved_bay",false),"completed trip parks in a different vacant bay")
+	_check(first_return.get("exited",false),"parked commuter exits the actual vehicle and resumes walking")
+	_check(first_return.get("clear",false),"returned commuter occupies a clear bay without overlapping another car")
 	# A player may steal a reserved vehicle while its owner is walking toward it.
 	# That claim must be abandoned, and neither occupied nor owned cars are selected.
 	manager.assignment_timer = 9999.0
